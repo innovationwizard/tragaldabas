@@ -1,0 +1,157 @@
+"""Pipeline orchestrator"""
+
+from dataclasses import dataclass
+from typing import Optional
+
+from core.models import *
+from core.exceptions import PipelineError, StageError
+from core.enums import ContentType
+from stages import (
+    Receiver, Classifier, StructureInferrer, Archaeologist,
+    Reconciler, ETLManager, Analyzer, OutputManager
+)
+from ui.progress import ProgressTracker
+from ui.prompts import UserPrompt
+from config import settings
+
+
+@dataclass
+class PipelineContext:
+    """Shared context passed through pipeline"""
+    file_path: str
+    reception: Optional[ReceptionResult] = None
+    classification: Optional[ContentClassification] = None
+    structure: Optional[StructureResult] = None
+    archaeology: Optional[ArchaeologyResult] = None
+    reconciliation: Optional[ReconciliationResult] = None
+    etl: Optional[ETLResult] = None
+    analysis: Optional[AnalysisResult] = None
+    output: Optional[OutputResult] = None
+
+
+class Orchestrator:
+    """Pipeline coordinator"""
+    
+    def __init__(
+        self,
+        progress: ProgressTracker,
+        prompt: UserPrompt,
+        db_connection_string: Optional[str] = None
+    ):
+        self.progress = progress
+        self.prompt = prompt
+        self.db_connection_string = db_connection_string
+        
+        # Initialize stages
+        self.stages = {
+            0: Receiver(),
+            1: Classifier(),
+            2: StructureInferrer(),
+            3: Archaeologist(),
+            4: Reconciler(),
+            5: ETLManager(db_connection_string),
+            6: Analyzer(),
+            7: OutputManager(),
+        }
+    
+    async def run(self, file_path: str) -> PipelineContext:
+        """Execute full pipeline"""
+        ctx = PipelineContext(file_path=file_path)
+        
+        try:
+            # Stage 0: Reception
+            ctx.reception = await self._execute_stage(0, file_path)
+            
+            # Stage 1: Classification
+            ctx.classification = await self._execute_stage(1, ctx.reception)
+            ctx.classification = await self._confirm_classification(ctx.classification)
+            
+            # Branch based on content type
+            if ctx.classification.primary_type == ContentType.NARRATIVE:
+                ctx = await self._narrative_path(ctx)
+            else:
+                ctx = await self._structured_path(ctx)
+            
+            # Stage 6: Analysis
+            ctx.analysis = await self._execute_stage(6, {
+                "etl": ctx.etl,
+                "domain": ctx.classification.domain
+            })
+            
+            # Stage 7: Output
+            ctx.output = await self._execute_stage(7, ctx.analysis)
+            
+            self.progress.complete()
+            return ctx
+            
+        except StageError as e:
+            self.progress.fail(e.stage, str(e))
+            raise PipelineError(f"Pipeline failed at stage {e.stage}: {e}", stage=e.stage)
+    
+    async def _structured_path(self, ctx: PipelineContext) -> PipelineContext:
+        """Process structured data (Excel, CSV)"""
+        
+        # Stage 2: Structure Inference
+        ctx.structure = await self._execute_stage(2, ctx.reception)
+        
+        # Stage 3: Archaeology
+        ctx.archaeology = await self._execute_stage(3, {
+            "reception": ctx.reception,
+            "structure": ctx.structure
+        })
+        
+        # Stage 4: Reconciliation (if multi-sheet)
+        if len(ctx.reception.previews) > 1:
+            ctx.reconciliation = await self._execute_stage(4, ctx.archaeology)
+        
+        # Stage 5: ETL
+        etl_input = ctx.reconciliation or ctx.archaeology
+        ctx.etl = await self._execute_stage(5, etl_input)
+        
+        return ctx
+    
+    async def _narrative_path(self, ctx: PipelineContext) -> PipelineContext:
+        """Process narrative documents (Word)"""
+        
+        # Stage 2: Document structure
+        ctx.structure = await self._execute_stage(2, ctx.reception)
+        
+        # Skip stages 3-4 (not applicable)
+        # Stage 5: Extract facts, persist as structured
+        ctx.etl = await self._execute_stage(5, {
+            "reception": ctx.reception,
+            "structure": ctx.structure,
+            "narrative_mode": True
+        })
+        
+        return ctx
+    
+    async def _execute_stage(self, stage_num: int, input_data) -> any:
+        """Execute a single stage with progress tracking"""
+        stage = self.stages[stage_num]
+        
+        self.progress.start_stage(stage_num, stage.name)
+        
+        if not stage.validate_input(input_data):
+            raise StageError(stage_num, "Invalid input")
+        
+        result = await stage.execute(input_data)
+        
+        self.progress.complete_stage(stage_num)
+        return result
+    
+    async def _confirm_classification(
+        self, 
+        classification: ContentClassification
+    ) -> ContentClassification:
+        """User checkpoint: confirm domain if low confidence"""
+        if classification.confidence < settings.CONFIDENCE_THRESHOLD:
+            confirmed = await self.prompt.yes_no(
+                f"I detected this as {classification.domain.value}. Correct?"
+            )
+            if not confirmed:
+                new_domain = await self.prompt.select_domain()
+                classification.domain = new_domain
+            classification.user_confirmed = True
+        return classification
+

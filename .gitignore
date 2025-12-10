@@ -1,0 +1,443 @@
+# =============================================================================
+# Tragaldabas - Comprehensive .gitignore
+# Industry Best Practices for Python Projects
+# =============================================================================
+
+# =============================================================================
+# Environment & Secrets
+# =============================================================================
+# Never commit secrets, API keys, or credentials
+.env
+.env.*
+!.env.example
+*.env
+*.env.local
+*.env.*.local
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+credentials.json
+service-account.json
+config/secrets.yaml
+config/secrets.yml
+
+# =============================================================================
+# Python
+# =============================================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff (if applicable)
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff (if applicable)
+instance/
+.webassets-cache
+
+# Scrapy stuff (if applicable)
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.venv
+venv/
+ENV/
+env/
+.conda/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# =============================================================================
+# IDEs & Editors
+# =============================================================================
+# VSCode
+.vscode/
+*.code-workspace
+.history/
+
+# PyCharm / IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Eclipse
+.project
+.pydevproject
+.settings/
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.loadpath
+.recommenders
+
+# =============================================================================
+# Operating System Files
+# =============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# Database
+# =============================================================================
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# PostgreSQL
+*.sql.backup
+*.sql.dump
+pgdata/
+postgres-data/
+
+# MySQL
+*.sql.gz
+*.sql.bz2
+
+# Database connection strings and credentials
+database.ini
+db_config.json
+
+# =============================================================================
+# Logs & Temporary Files
+# =============================================================================
+# Logs
+*.log
+logs/
+*.log.*
+log/
+*.out
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+.tmp/
+.temp/
+
+# =============================================================================
+# Project-Specific
+# =============================================================================
+# Output directories
+output/
+outputs/
+results/
+generated/
+
+# Data files (may contain sensitive data)
+data/raw/
+data/processed/
+data/external/
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.h5
+*.hdf5
+
+# Model files (if using ML)
+models/
+*.pkl
+*.joblib
+*.h5
+*.pb
+*.onnx
+*.pt
+*.pth
+
+# Cache
+.cache/
+*.cache
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# =============================================================================
+# Authentication & Security
+# =============================================================================
+# JWT tokens
+*.token
+tokens/
+.jwt_secret
+
+# Session files
+sessions/
+*.session
+
+# Password reset tokens
+reset_tokens/
+
+# =============================================================================
+# Build & Deployment
+# =============================================================================
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# =============================================================================
+# Testing
+# =============================================================================
+# Test fixtures with sensitive data
+tests/fixtures/*.csv
+tests/fixtures/*.xlsx
+tests/fixtures/*.db
+
+# Test output
+test-results/
+test-reports/
+
+# =============================================================================
+# Documentation
+# =============================================================================
+# Generated documentation
+docs/_build/
+docs/.doctrees/
+site/
+
+# =============================================================================
+# Miscellaneous
+# =============================================================================
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS generated files
+.DS_Store?
+ehthumbs.db
+Icon?
+
+# Application specific
+*.pid
+*.seed
+*.pid.lock
+
+# =============================================================================
+# Keep These (Use ! to negate patterns)
+# =============================================================================
+# Keep example files
+!.env.example
+!requirements.txt
+!README.md
+!LICENSE
+
+# Keep necessary config templates
+!config.example.yaml
+!config.template.json
+
+# Keep test fixtures (if they don't contain sensitive data)
+!tests/fixtures/example_data.csv
+!tests/fixtures/sample_data.xlsx
+

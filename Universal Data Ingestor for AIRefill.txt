@@ -1,0 +1,27 @@
+ingestor/
+├── src/
+│   ├── __init__.py
+│   ├── main.py              # Entry point
+│   ├── parsers/
+│   │   ├── __init__.py
+│   │   ├── csv_parser.py
+│   │   └── excel_parser.py
+│   ├── mappers/
+│   │   ├── __init__.py
+│   │   ├── semantic_mapper.py
+│   │   └── schema_mappings.py
+│   ├── validators/
+│   │   ├── __init__.py
+│   │   └── data_validator.py
+│   ├── transformers/
+│   │   ├── __init__.py
+│   │   └── data_transformer.py
+│   └── exporters/
+│       ├── __init__.py
+│       └── postgres_exporter.py
+├── output/
+│   ├── data/               # PostgreSQL COPY format files
+│   ├── sql/                # SQL scripts
+│   └── logs/               # Processing logs
+├── requirements.txt
+└── README.md
