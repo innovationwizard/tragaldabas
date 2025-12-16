@@ -17,10 +17,6 @@
       "dest": "/api/index.py"
     },
     {
-      "src": "/ws/(.*)",
-      "dest": "/api/index.py"
-    },
-    {
       "src": "/(.*)",
       "dest": "/$1"
     }
