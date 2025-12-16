@@ -102,9 +102,7 @@ const Register = () => {
                 onChange={handleChange}
                 className="input-field w-full"
                 required
-                minLength={12}
               />
-              <p className="text-brand-muted text-xs mt-1">Minimum 12 characters</p>
             </div>
 
             <button
