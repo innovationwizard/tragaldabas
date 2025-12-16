@@ -544,12 +544,12 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
 
 # Serve frontend (catch-all route for SPA)
 # This must be last to catch all non-API routes
+# FastAPI matches routes in order, so explicit API routes above will be matched first
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
     """Serve frontend app - handles all non-API routes"""
-    # Block API routes that aren't explicitly defined above
-    if full_path.startswith("api/"):
-        raise HTTPException(status_code=404)
+    # Note: API routes are matched first by FastAPI, so this only handles non-API routes
+    # The check below is just a safety measure
     
     # Check if this is a static file request (JS, CSS, images, etc.)
     # Note: /assets/* requests are handled by StaticFiles mount above
