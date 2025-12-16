@@ -175,7 +175,7 @@ class ValidationIssue(BaseModel):
 
 class ETLResult(BaseModel):
     """Complete Stage 5 output"""
-    schema: PostgresTable
+    table_schema: PostgresTable  # Renamed from 'schema' to avoid shadowing BaseModel.schema
     schema_sql: str = ""
     data_file_path: str = ""
     load_sql: str = ""

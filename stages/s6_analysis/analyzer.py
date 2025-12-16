@@ -47,9 +47,9 @@ class Analyzer(Stage[Dict[str, Any], AnalysisResult]):
         # Build analysis context
         context = {
             "domain": domain.value,
-            "table_name": etl.schema.table_name,
+            "table_name": etl.table_schema.table_name,
             "row_count": len(df),
-            "columns": [col.name for col in etl.schema.columns],
+            "columns": [col.name for col in etl.table_schema.columns],
             "data_summary": df.describe().to_string()
         }
         

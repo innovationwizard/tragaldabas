@@ -78,7 +78,7 @@ class ETLManager(Stage[Union[ArchaeologyResult, ReconciliationResult], ETLResult
         invalid_rows = len(issues)
         
         return ETLResult(
-            schema=schema,
+            table_schema=schema,
             schema_sql=schema_sql,
             data_file_path=str(data_file),
             load_sql=load_sql,
