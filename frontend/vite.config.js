@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig(({ mode }) => {
   const baseUrl = process.env.VITE_BASE_URL || 'https://tragaldabas.com'
@@ -21,7 +22,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       extensions: ['.js', '.jsx', '.json', '.ts', '.tsx'],
       alias: {
-        '@': '/src'
+        '@': path.resolve(__dirname, './src')
       }
     },
     server: {
