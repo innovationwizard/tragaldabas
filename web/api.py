@@ -1,10 +1,12 @@
 """FastAPI application with Supabase Auth"""
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request
+from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from starlette.requests import Request
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
 import asyncio
