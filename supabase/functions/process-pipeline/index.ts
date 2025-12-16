@@ -9,13 +9,37 @@ const WORKER_URL = Deno.env.get('WORKER_URL') || '' // Optional: Railway/Render 
 
 serve(async (req) => {
   try {
-    // Get Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    // Get Supabase client - check environment variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Missing environment variables',
+          details: {
+            SUPABASE_URL: supabaseUrl ? 'set' : 'missing',
+            SUPABASE_SERVICE_ROLE_KEY: supabaseServiceKey ? 'set' : 'missing'
+          }
+        }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Parse request
-    const { job_id } = await req.json()
+    // Parse request body
+    let requestBody
+    try {
+      requestBody = await req.json()
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body', details: e.message }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    const { job_id } = requestBody
 
     if (!job_id) {
       return new Response(
@@ -91,8 +115,13 @@ serve(async (req) => {
     )
 
   } catch (error) {
+    console.error('Edge Function error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: 'Internal server error',
+        message: error.message,
+        stack: error.stack
+      }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }
