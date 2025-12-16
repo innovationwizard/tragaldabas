@@ -80,7 +80,7 @@ class LoginRequest(BaseModel):
 
 
 class WebProgressTracker:
-    """WebSocket-based progress tracker - inherits from ProgressTracker (lazy import)"""
+    """Polling-based progress tracker - stores progress in job object"""
     
     def __init__(self, job_id: str):
         self.job_id = job_id
@@ -90,41 +90,35 @@ class WebProgressTracker:
     def start_stage(self, stage_num: int, stage_name: str):
         self.current_stage = stage_num
         self.stage_name = stage_name
-        self._broadcast({
-            "type": "stage_start",
-            "stage": stage_num,
-            "name": stage_name
-        })
+        # Update job object for polling
+        if self.job_id in pipeline_jobs:
+            pipeline_jobs[self.job_id]["current_stage"] = stage_num
+            pipeline_jobs[self.job_id]["current_stage_name"] = stage_name
+            pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
     
     def complete_stage(self, stage_num: int):
-        self._broadcast({
-            "type": "stage_complete",
-            "stage": stage_num
-        })
+        # Update job object for polling
+        if self.job_id in pipeline_jobs:
+            pipeline_jobs[self.job_id]["completed_stages"] = pipeline_jobs[self.job_id].get("completed_stages", [])
+            if stage_num not in pipeline_jobs[self.job_id]["completed_stages"]:
+                pipeline_jobs[self.job_id]["completed_stages"].append(stage_num)
+            pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
     
     def fail(self, stage_num: int, error: str):
-        self._broadcast({
-            "type": "stage_error",
-            "stage": stage_num,
-            "error": error
-        })
+        # Update job object for polling
+        if self.job_id in pipeline_jobs:
+            pipeline_jobs[self.job_id]["status"] = "failed"
+            pipeline_jobs[self.job_id]["error"] = error
+            pipeline_jobs[self.job_id]["failed_stage"] = stage_num
+            pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
     
     def complete(self):
-        self._broadcast({
-            "type": "pipeline_complete"
-        })
-    
-    def _broadcast(self, message: dict):
-        """Broadcast progress to all connected clients"""
-        if self.job_id in progress_connections:
-            disconnected = []
-            for ws in progress_connections[self.job_id]:
-                try:
-                    asyncio.create_task(ws.send_json(message))
-                except:
-                    disconnected.append(ws)
-            for ws in disconnected:
-                progress_connections[self.job_id].remove(ws)
+        # Update job object for polling
+        if self.job_id in pipeline_jobs:
+            pipeline_jobs[self.job_id]["status"] = "completed"
+            pipeline_jobs[self.job_id]["current_stage"] = 7  # Output stage
+            pipeline_jobs[self.job_id]["current_stage_name"] = "Output"
+            pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
 
 
 class WebUserPrompt:
@@ -294,6 +288,10 @@ async def upload_file(
         "filename": file.filename,
         "status": "pending",
         "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+        "current_stage": None,
+        "current_stage_name": None,
+        "completed_stages": [],
         "questions": []
     }
     
@@ -313,7 +311,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
     
     # Make WebProgressTracker inherit from ProgressTracker
     class WebProgressTracker(ProgressTracker):
-        """WebSocket-based progress tracker"""
+        """Polling-based progress tracker - stores progress in job object"""
         
         def __init__(self, job_id: str):
             super().__init__()
@@ -324,41 +322,35 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         def start_stage(self, stage_num: int, stage_name: str):
             self.current_stage = stage_num
             self.stage_name = stage_name
-            self._broadcast({
-                "type": "stage_start",
-                "stage": stage_num,
-                "name": stage_name
-            })
+            # Update job object for polling
+            if self.job_id in pipeline_jobs:
+                pipeline_jobs[self.job_id]["current_stage"] = stage_num
+                pipeline_jobs[self.job_id]["current_stage_name"] = stage_name
+                pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
         
         def complete_stage(self, stage_num: int):
-            self._broadcast({
-                "type": "stage_complete",
-                "stage": stage_num
-            })
+            # Update job object for polling
+            if self.job_id in pipeline_jobs:
+                pipeline_jobs[self.job_id]["completed_stages"] = pipeline_jobs[self.job_id].get("completed_stages", [])
+                if stage_num not in pipeline_jobs[self.job_id]["completed_stages"]:
+                    pipeline_jobs[self.job_id]["completed_stages"].append(stage_num)
+                pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
         
         def fail(self, stage_num: int, error: str):
-            self._broadcast({
-                "type": "stage_error",
-                "stage": stage_num,
-                "error": error
-            })
+            # Update job object for polling
+            if self.job_id in pipeline_jobs:
+                pipeline_jobs[self.job_id]["status"] = "failed"
+                pipeline_jobs[self.job_id]["error"] = error
+                pipeline_jobs[self.job_id]["failed_stage"] = stage_num
+                pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
         
         def complete(self):
-            self._broadcast({
-                "type": "pipeline_complete"
-            })
-        
-        def _broadcast(self, message: dict):
-            """Broadcast progress to all connected clients"""
-            if self.job_id in progress_connections:
-                disconnected = []
-                for ws in progress_connections[self.job_id]:
-                    try:
-                        asyncio.create_task(ws.send_json(message))
-                    except:
-                        disconnected.append(ws)
-                for ws in disconnected:
-                    progress_connections[self.job_id].remove(ws)
+            # Update job object for polling
+            if self.job_id in pipeline_jobs:
+                pipeline_jobs[self.job_id]["status"] = "completed"
+                pipeline_jobs[self.job_id]["current_stage"] = 7  # Output stage
+                pipeline_jobs[self.job_id]["current_stage_name"] = "Output"
+                pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
     
     # Make WebUserPrompt inherit from UserPrompt
     class WebUserPrompt(UserPrompt):
@@ -390,6 +382,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
     
     try:
         pipeline_jobs[job_id]["status"] = "running"
+        pipeline_jobs[job_id]["updated_at"] = datetime.utcnow().isoformat()
         
         progress = WebProgressTracker(job_id)
         prompt = WebUserPrompt(job_id)
@@ -403,6 +396,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         ctx = await orchestrator.run(file_path)
         
         pipeline_jobs[job_id]["status"] = "completed"
+        pipeline_jobs[job_id]["updated_at"] = datetime.utcnow().isoformat()
+        
         # Convert Pydantic models to dict (works for both v1 and v2)
         def to_dict(model):
             if model is None:
@@ -427,6 +422,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
     except Exception as e:
         pipeline_jobs[job_id]["status"] = "failed"
         pipeline_jobs[job_id]["error"] = str(e)
+        pipeline_jobs[job_id]["updated_at"] = datetime.utcnow().isoformat()
 
 
 @app.get("/api/pipeline/jobs")
@@ -473,10 +469,35 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
     return {"message": "Download endpoint - implement based on output structure"}
 
 
-# WebSocket for progress updates
+# Polling endpoint for progress updates (replaces WebSocket for Vercel compatibility)
+@app.get("/api/pipeline/jobs/{job_id}/status")
+async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
+    """Get current job status for polling"""
+    user_id = user.get("id")
+    
+    if job_id not in pipeline_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = pipeline_jobs[job_id]
+    if job.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return {
+        "id": job.get("id"),
+        "status": job.get("status"),
+        "current_stage": job.get("current_stage"),
+        "current_stage_name": job.get("current_stage_name"),
+        "completed_stages": job.get("completed_stages", []),
+        "error": job.get("error"),
+        "updated_at": job.get("updated_at")
+    }
+
+
+# WebSocket endpoint (kept for local development, not supported on Vercel)
+# Use polling endpoint /api/pipeline/jobs/{job_id}/status instead
 @app.websocket("/ws/progress/{job_id}")
 async def websocket_progress(websocket: WebSocket, job_id: str):
-    """WebSocket endpoint for real-time progress updates"""
+    """WebSocket endpoint for real-time progress updates (local dev only)"""
     await websocket.accept()
     
     if job_id not in progress_connections:

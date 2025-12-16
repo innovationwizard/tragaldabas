@@ -19,15 +19,15 @@ const Pipeline = () => {
   const [job, setJob] = useState(null)
   const [currentStage, setCurrentStage] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [ws, setWs] = useState(null)
+  const [pollingInterval, setPollingInterval] = useState(null)
 
   useEffect(() => {
     fetchJob()
-    connectWebSocket()
+    startPolling()
 
     return () => {
-      if (ws) {
-        ws.close()
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
       }
     }
   }, [jobId])
@@ -44,42 +44,60 @@ const Pipeline = () => {
     }
   }
 
-  const connectWebSocket = () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws/progress/${jobId}`
-    const websocket = new WebSocket(wsUrl)
-
-    websocket.onmessage = (event) => {
-      const data = JSON.parse(event.data)
+  const pollJobStatus = async () => {
+    try {
+      const response = await axios.get(`/api/pipeline/jobs/${jobId}/status`)
+      const status = response.data
       
-      if (data.type === 'stage_start') {
-        setCurrentStage({ num: data.stage, name: data.name })
-      } else if (data.type === 'stage_complete') {
-        fetchJob() // Refresh job status
-      } else if (data.type === 'pipeline_complete') {
-        fetchJob()
+      // Update current stage from status
+      if (status.current_stage !== null && status.current_stage !== undefined) {
+        setCurrentStage({ 
+          num: status.current_stage, 
+          name: status.current_stage_name || STAGES[status.current_stage]?.name || 'Processing' 
+        })
+      }
+      
+      // If job completed, stop polling and redirect
+      if (status.status === 'completed') {
+        if (pollingInterval) {
+          clearInterval(pollingInterval)
+        }
+        fetchJob() // Get full job data
         setTimeout(() => {
           window.location.href = `/results/${jobId}`
         }, 1000)
-      } else if (data.type === 'status') {
-        setJob(data.data)
-        updateCurrentStage(data.data)
+      } else if (status.status === 'failed') {
+        if (pollingInterval) {
+          clearInterval(pollingInterval)
+        }
+        fetchJob() // Get full job data with error
       }
+    } catch (error) {
+      console.error('Failed to poll job status:', error)
     }
+  }
 
-    websocket.onerror = (error) => {
-      console.error('WebSocket error:', error)
-    }
-
-    setWs(websocket)
+  const startPolling = () => {
+    // Poll every 2 seconds while job is running
+    const interval = setInterval(() => {
+      pollJobStatus()
+    }, 2000)
+    setPollingInterval(interval)
   }
 
   const updateCurrentStage = (jobData) => {
     if (jobData.status === 'completed') {
       setCurrentStage({ num: 7, name: 'Output' })
     } else if (jobData.status === 'running') {
-      // Determine current stage from job data or default to 0
-      setCurrentStage({ num: 0, name: 'Reception' })
+      // Use current_stage from job data if available
+      if (jobData.current_stage !== null && jobData.current_stage !== undefined) {
+        setCurrentStage({ 
+          num: jobData.current_stage, 
+          name: jobData.current_stage_name || STAGES[jobData.current_stage]?.name || 'Processing' 
+        })
+      } else {
+        setCurrentStage({ num: 0, name: 'Reception' })
+      }
     }
   }
 
@@ -89,9 +107,23 @@ const Pipeline = () => {
     }
     
     if (job.status === 'failed') {
+      // Check if this is the failed stage
+      if (job.failed_stage === stageNum) {
+        return 'error'
+      }
+      // If failed at a later stage, mark earlier stages as completed
+      if (job.failed_stage && stageNum < job.failed_stage) {
+        return 'completed'
+      }
       return 'error'
     }
 
+    // Use completed_stages array if available
+    if (job.completed_stages && job.completed_stages.includes(stageNum)) {
+      return 'completed'
+    }
+
+    // Fallback to current_stage comparison
     if (currentStage && stageNum < currentStage.num) {
       return 'completed'
     } else if (currentStage && stageNum === currentStage.num) {
