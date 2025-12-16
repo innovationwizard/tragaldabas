@@ -451,9 +451,6 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         
         ctx = await orchestrator.run(file_path)
         
-        pipeline_jobs[job_id]["status"] = "completed"
-        pipeline_jobs[job_id]["updated_at"] = datetime.utcnow().isoformat()
-        
         # Convert Pydantic models to dict (works for both v1 and v2)
         def to_dict(model):
             if model is None:
@@ -464,7 +461,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 return model.dict()
             return str(model)
         
-        pipeline_jobs[job_id]["result"] = {
+        result = {
             "reception": to_dict(ctx.reception),
             "classification": to_dict(ctx.classification),
             "structure": to_dict(ctx.structure),
@@ -475,10 +472,18 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             "output": to_dict(ctx.output),
         }
         
+        # Update job with completed status and result
+        await update_job_in_db(job_id, {
+            "status": "completed",
+            "result": result
+        })
+        
     except Exception as e:
-        pipeline_jobs[job_id]["status"] = "failed"
-        pipeline_jobs[job_id]["error"] = str(e)
-        pipeline_jobs[job_id]["updated_at"] = datetime.utcnow().isoformat()
+        # Update job with failed status and error
+        await update_job_in_db(job_id, {
+            "status": "failed",
+            "error": str(e)
+        })
 
 
 @app.get("/api/pipeline/jobs")
