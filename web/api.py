@@ -74,7 +74,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str  # Changed from email to username
     password: str
 
 
@@ -206,14 +206,27 @@ async def register(user_data: RegisterRequest):
 
 @app.post("/api/auth/login")
 async def login(login_data: LoginRequest):
-    """Login user via Supabase Auth"""
+    """Login user via Supabase Auth using username"""
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase Auth not configured")
     
     try:
-        # Login with Supabase Auth
+        # Look up user by username in user_metadata
+        # Get all users and find the one with matching username
+        users_response = supabase.auth.admin.list_users()
+        
+        user_email = None
+        for user in users_response.users:
+            if user.user_metadata and user.user_metadata.get("username") == login_data.username:
+                user_email = user.email
+                break
+        
+        if not user_email:
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+        
+        # Login with Supabase Auth using the found email
         response = supabase.auth.sign_in_with_password({
-            "email": login_data.email,
+            "email": user_email,
             "password": login_data.password
         })
         
@@ -228,10 +241,12 @@ async def login(login_data: LoginRequest):
                 }
             }
         else:
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+            raise HTTPException(status_code=401, detail="Invalid username or password")
             
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
 
 @app.post("/api/auth/logout")

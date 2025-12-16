@@ -47,20 +47,34 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe()
   }, [])
 
-  const login = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) throw error
-    
-    // Set axios default auth header
-    if (data.session?.access_token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${data.session.access_token}`
+  const login = async (username, password) => {
+    // Use backend API to login with username (backend will look up email)
+    try {
+      const response = await axios.post('/api/auth/login', {
+        username,
+        password,
+      })
+      
+      if (response.data.access_token) {
+        // Set the session manually since we're using backend API
+        await supabase.auth.setSession({
+          access_token: response.data.access_token,
+          refresh_token: response.data.refresh_token,
+        })
+        
+        // Set axios default auth header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
+        
+        // Get the user from the session
+        const { data: { user } } = await supabase.auth.getUser()
+        return user
+      }
+    } catch (error) {
+      if (error.response) {
+        throw new Error(error.response.data.detail || 'Login failed')
+      }
+      throw error
     }
-    
-    return data.user
   }
 
   const register = async (email, password, metadata = {}) => {
