@@ -525,7 +525,17 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
     user_id = user.get("id")
     
     if job_id not in pipeline_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
+        # In serverless functions, in-memory storage is lost between invocations
+        # Return a default status instead of 404 to prevent polling errors
+        return {
+            "id": job_id,
+            "status": "unknown",
+            "current_stage": None,
+            "current_stage_name": None,
+            "completed_stages": [],
+            "error": "Job not found in current session. Jobs are stored in-memory and may be lost between serverless function invocations.",
+            "updated_at": None
+        }
     
     job = pipeline_jobs[job_id]
     if job.get("user_id") != user_id:

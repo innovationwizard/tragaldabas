@@ -56,55 +56,38 @@ export const AuthProvider = ({ children }) => {
       })
       
       if (response.data.access_token && response.data.refresh_token) {
-        // Set the session manually since we're using backend API
-        const { data: { session }, error: sessionError } = await supabase.auth.setSession({
-          access_token: response.data.access_token,
-          refresh_token: response.data.refresh_token,
-        })
-        
-        if (sessionError) {
-          console.error('Session error:', sessionError)
-          // Don't throw - try to continue with the tokens we have
-        }
-        
-        // Set axios default auth header
+        // Set axios default auth header first (most important for API calls)
         axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
         
-        // Use user from response if available (more reliable)
+        // Try to set Supabase session (non-critical - backend auth works fine)
+        try {
+          const { data: { session }, error: sessionError } = await supabase.auth.setSession({
+            access_token: response.data.access_token,
+            refresh_token: response.data.refresh_token,
+          })
+          
+          if (sessionError) {
+            console.warn('Supabase session error (non-critical, backend auth works):', sessionError.message)
+          }
+        } catch (err) {
+          console.warn('Failed to set Supabase session (non-critical):', err.message)
+          // Continue - backend authentication works fine
+        }
+        
+        // Use user from response (most reliable - comes from backend)
         if (response.data.user) {
           setUser(response.data.user)
           return response.data.user
-        } 
-        
-        // Fallback to session user
-        if (session?.user) {
-          setUser(session.user)
-          return session.user
         }
         
-        // Last resort: try to get user from Supabase (may fail with 401)
-        try {
-          const { data: { user }, error: userError } = await supabase.auth.getUser()
-          if (!userError && user) {
-            setUser(user)
-            return user
-          }
-        } catch (err) {
-          console.warn('Could not get user from Supabase, but login succeeded:', err)
+        // Fallback: create user object from available data
+        const user = {
+          id: response.data.user?.id || 'unknown',
+          email: response.data.user?.email || username,
+          user_metadata: response.data.user?.user_metadata || {}
         }
-        
-        // If we have tokens but no user, create a minimal user object
-        if (response.data.access_token) {
-          const minimalUser = {
-            id: response.data.user?.id || 'unknown',
-            email: response.data.user?.email || login_data.username,
-            user_metadata: response.data.user?.user_metadata || {}
-          }
-          setUser(minimalUser)
-          return minimalUser
-        }
-        
-        throw new Error('No user data available')
+        setUser(user)
+        return user
       } else {
         throw new Error('No access token received')
       }
