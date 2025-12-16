@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import axios from 'axios'
 // Use relative path for better Vercel compatibility
-import { supabase } from '../lib/supabase.js'
+import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext()
 
