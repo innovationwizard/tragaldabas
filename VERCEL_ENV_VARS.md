@@ -17,18 +17,14 @@ GOOGLE_API_KEY=AIzaSy...
 
 ### Authentication (Required for Production)
 
+**Supabase Auth (Recommended):**
 ```env
-JWT_SECRET_KEY=your-secret-key-here
+SUPABASE_URL=https://[PROJECT-REF].supabase.co
+SUPABASE_ANON_KEY=eyJhbGc...  # From Supabase Dashboard → Settings → API
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...  # Server-side only! Keep secret.
 ```
 
-**Generate a secure key:**
-```bash
-python generate_jwt_secret.py
-# Or generate manually:
-openssl rand -hex 32
-```
-
-⚠️ **Important:** Without `JWT_SECRET_KEY`, tokens will be auto-generated on each deployment, causing users to be logged out on redeploy.
+**Note:** The application now uses Supabase Auth. The old `JWT_SECRET_KEY` is no longer needed.
 
 ## Recommended Environment Variables
 
