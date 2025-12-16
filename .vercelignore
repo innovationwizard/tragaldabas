@@ -55,5 +55,5 @@ utils/
 ui/
 orchestrator.py
 main.py
-config.py
+# Note: config.py is needed for settings, so it's NOT ignored
 
