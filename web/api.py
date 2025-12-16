@@ -1,7 +1,6 @@
 """FastAPI application with Supabase Auth"""
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request
-from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -39,7 +38,7 @@ if SUPABASE_AVAILABLE and settings.SUPABASE_URL and settings.SUPABASE_SERVICE_RO
     except Exception as e:
         print(f"Warning: Failed to initialize Supabase client: {e}")
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)  # Don't auto-raise error, handle manually
 
 app = FastAPI(
     title="Tragaldabas API",
@@ -501,8 +500,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
 @app.post("/api/pipeline/process/{job_id}")
 async def process_job(
     job_id: str,
-    request: FastAPIRequest,
-    user: Optional[dict] = Depends(get_current_user)
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ):
     """Process a pending pipeline job - can be called by Supabase Edge Function or worker"""
     
@@ -515,20 +514,23 @@ async def process_job(
     user_id = None
     is_service_call = False
     
-    if user:
-        user_id = user.get("id")
-    else:
-        # Try to get service key from header (for Edge Function calls)
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-            # Verify this is the service role key
+    if credentials:
+        token = credentials.credentials
+        # Try to verify as user token first
+        try:
+            if supabase:
+                user_response = supabase.auth.get_user(token)
+                if user_response.user:
+                    user_id = user_response.user.id
+        except:
+            # If user auth fails, check if it's service role key
             if token == settings.SUPABASE_SERVICE_ROLE_KEY:
                 is_service_call = True
             else:
-                raise HTTPException(status_code=401, detail="Invalid service key")
-        else:
-            raise HTTPException(status_code=401, detail="Authentication required")
+                raise HTTPException(status_code=401, detail="Invalid token")
+    else:
+        # No credentials provided
+        raise HTTPException(status_code=401, detail="Authentication required")
     
     # Verify ownership (skip if called with service key)
     if not is_service_call and user_id and job.get("user_id") != user_id:
