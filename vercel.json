@@ -6,7 +6,6 @@
   "framework": null,
   "functions": {
     "api/**/*.py": {
-      "runtime": "python3.12",
       "maxDuration": 60,
       "memory": 2048
     }
@@ -19,6 +18,12 @@
     {
       "src": "/(.*)",
       "dest": "/$1"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.py"
     }
   ]
 }
