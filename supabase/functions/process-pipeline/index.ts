@@ -5,6 +5,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const VERCEL_API_URL = Deno.env.get('VERCEL_API_URL') || 'https://tragaldabas.vercel.app'
+const WORKER_URL = Deno.env.get('WORKER_URL') || '' // Optional: Railway/Render worker URL
 
 serve(async (req) => {
   try {
@@ -51,9 +52,12 @@ serve(async (req) => {
       .update({ status: 'running', updated_at: new Date().toISOString() })
       .eq('id', job_id)
 
-    // Call Vercel API to process the job
-    // Use service role key for authentication (passed as Bearer token)
-    const vercelResponse = await fetch(`${VERCEL_API_URL}/api/pipeline/process/${job_id}`, {
+    // Call processing endpoint - prefer worker if available, otherwise Vercel API
+    const processingUrl = WORKER_URL 
+      ? `${WORKER_URL}/process/${job_id}`
+      : `${VERCEL_API_URL}/api/pipeline/process/${job_id}`
+    
+    const vercelResponse = await fetch(processingUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
