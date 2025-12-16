@@ -131,47 +131,8 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class WebProgressTracker:
-    """Polling-based progress tracker - stores progress in job object"""
-    
-    def __init__(self, job_id: str):
-        self.job_id = job_id
-        self.current_stage = None
-        self.stage_name = None
-    
-    def start_stage(self, stage_num: int, stage_name: str):
-        self.current_stage = stage_num
-        self.stage_name = stage_name
-        # Update job object for polling
-        if self.job_id in pipeline_jobs:
-            pipeline_jobs[self.job_id]["current_stage"] = stage_num
-            pipeline_jobs[self.job_id]["current_stage_name"] = stage_name
-            pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
-    
-    def complete_stage(self, stage_num: int):
-        # Update job object for polling
-        if self.job_id in pipeline_jobs:
-            pipeline_jobs[self.job_id]["completed_stages"] = pipeline_jobs[self.job_id].get("completed_stages", [])
-            if stage_num not in pipeline_jobs[self.job_id]["completed_stages"]:
-                pipeline_jobs[self.job_id]["completed_stages"].append(stage_num)
-            pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
-    
-    def fail(self, stage_num: int, error: str):
-        # Update job object for polling
-        if self.job_id in pipeline_jobs:
-            pipeline_jobs[self.job_id]["status"] = "failed"
-            pipeline_jobs[self.job_id]["error"] = error
-            pipeline_jobs[self.job_id]["failed_stage"] = stage_num
-            pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
-    
-    def complete(self):
-        # Update job object for polling
-        if self.job_id in pipeline_jobs:
-            pipeline_jobs[self.job_id]["status"] = "completed"
-            pipeline_jobs[self.job_id]["current_stage"] = 7  # Output stage
-            pipeline_jobs[self.job_id]["current_stage_name"] = "Output"
-            pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
-
+# Note: WebProgressTracker and WebUserPrompt are defined inside run_pipeline()
+# to inherit from ProgressTracker and UserPrompt (lazy imports)
 
 class WebUserPrompt:
     """Web-based user prompt - stores questions in Supabase database"""
@@ -370,20 +331,21 @@ async def upload_file(
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     
-    # Initialize job
+    # Initialize job in Supabase database
     user_id = user.get("id")
-    pipeline_jobs[job_id] = {
+    job_data = {
         "id": job_id,
         "user_id": user_id,
         "filename": file.filename,
         "status": "pending",
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
         "current_stage": None,
         "current_stage_name": None,
         "completed_stages": [],
         "questions": []
     }
+    
+    # Create job in database
+    await create_job_in_db(job_data)
     
     # Start pipeline asynchronously
     asyncio.create_task(run_pipeline(job_id, str(file_path), user_id))
@@ -401,7 +363,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
     
     # Make WebProgressTracker inherit from ProgressTracker
     class WebProgressTracker(ProgressTracker):
-        """Polling-based progress tracker - stores progress in job object"""
+        """Polling-based progress tracker - stores progress in Supabase database"""
         
         def __init__(self, job_id: str):
             super().__init__()
@@ -412,39 +374,42 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         def start_stage(self, stage_num: int, stage_name: str):
             self.current_stage = stage_num
             self.stage_name = stage_name
-            # Update job object for polling
-            if self.job_id in pipeline_jobs:
-                pipeline_jobs[self.job_id]["current_stage"] = stage_num
-                pipeline_jobs[self.job_id]["current_stage_name"] = stage_name
-                pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
+            # Update job in database for polling
+            asyncio.create_task(update_job_in_db(self.job_id, {
+                "current_stage": stage_num,
+                "current_stage_name": stage_name
+            }))
         
         def complete_stage(self, stage_num: int):
-            # Update job object for polling
-            if self.job_id in pipeline_jobs:
-                pipeline_jobs[self.job_id]["completed_stages"] = pipeline_jobs[self.job_id].get("completed_stages", [])
-                if stage_num not in pipeline_jobs[self.job_id]["completed_stages"]:
-                    pipeline_jobs[self.job_id]["completed_stages"].append(stage_num)
-                pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
+            # Get current completed stages and update
+            async def update_completed():
+                job = await get_job_from_db(self.job_id)
+                if job:
+                    completed = job.get("completed_stages", []) or []
+                    if stage_num not in completed:
+                        completed.append(stage_num)
+                        await update_job_in_db(self.job_id, {"completed_stages": completed})
+            asyncio.create_task(update_completed())
         
         def fail(self, stage_num: int, error: str):
-            # Update job object for polling
-            if self.job_id in pipeline_jobs:
-                pipeline_jobs[self.job_id]["status"] = "failed"
-                pipeline_jobs[self.job_id]["error"] = error
-                pipeline_jobs[self.job_id]["failed_stage"] = stage_num
-                pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
+            # Update job status in database
+            asyncio.create_task(update_job_in_db(self.job_id, {
+                "status": "failed",
+                "error": error,
+                "failed_stage": stage_num
+            }))
         
         def complete(self):
-            # Update job object for polling
-            if self.job_id in pipeline_jobs:
-                pipeline_jobs[self.job_id]["status"] = "completed"
-                pipeline_jobs[self.job_id]["current_stage"] = 7  # Output stage
-                pipeline_jobs[self.job_id]["current_stage_name"] = "Output"
-                pipeline_jobs[self.job_id]["updated_at"] = datetime.utcnow().isoformat()
+            # Update job status in database
+            asyncio.create_task(update_job_in_db(self.job_id, {
+                "status": "completed",
+                "current_stage": 7,  # Output stage
+                "current_stage_name": "Output"
+            }))
     
     # Make WebUserPrompt inherit from UserPrompt
     class WebUserPrompt(UserPrompt):
-        """Web-based user prompt (stores questions for frontend)"""
+        """Web-based user prompt - stores questions in Supabase database"""
         
         def __init__(self, job_id: str):
             super().__init__()
@@ -459,20 +424,21 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 "type": "yes_no",
                 "question": question
             })
-            pipeline_jobs[self.job_id]["questions"] = self.pending_questions
+            # Update questions in database
+            asyncio.create_task(update_job_in_db(self.job_id, {"questions": self.pending_questions}))
             # In real implementation, wait for user response via polling
             # For now, default to yes
             return True
         
         async def select_domain(self):
             """Domain selection"""
-            # Would prompt user via WebSocket
+            # Would prompt user via polling/API
             from core.enums import Domain
             return Domain.FINANCIAL  # Default
     
     try:
-        pipeline_jobs[job_id]["status"] = "running"
-        pipeline_jobs[job_id]["updated_at"] = datetime.utcnow().isoformat()
+        # Update job status to running
+        await update_job_in_db(job_id, {"status": "running"})
         
         progress = WebProgressTracker(job_id)
         prompt = WebUserPrompt(job_id)
@@ -519,10 +485,11 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
 async def list_jobs(user: dict = Depends(get_current_user)):
     """List user's pipeline jobs"""
     user_id = user.get("id")
+    jobs = await list_user_jobs_from_db(user_id)
+    # Remove result field for list view (too large)
     user_jobs = [
         {k: v for k, v in job.items() if k != "result"}
-        for job in pipeline_jobs.values()
-        if job.get("user_id") == user_id
+        for job in jobs
     ]
     return {"jobs": user_jobs}
 
@@ -547,10 +514,9 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
     """Download output files"""
     user_id = user.get("id")
     
-    if job_id not in pipeline_jobs:
+    job = await get_job_from_db(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = pipeline_jobs[job_id]
     if job.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     
