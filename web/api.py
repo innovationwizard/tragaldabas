@@ -533,9 +533,21 @@ async def serve_frontend(full_path: str):
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404)
     
+    # Check if this is a static file request (JS, CSS, images, etc.)
+    # Note: /assets/* requests are handled by StaticFiles mount above
+    static_extensions = (".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", 
+                        ".woff", ".woff2", ".ttf", ".eot", ".json", ".map", ".webp")
+    if full_path.endswith(static_extensions):
+        # Try to serve the actual file from dist root
+        file_path = static_dir / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        # If not found, return 404
+        raise HTTPException(status_code=404, detail="File not found")
+    
     # Serve index.html for all frontend routes (React Router handles routing)
     index_file = static_dir / "index.html"
     if index_file.exists():
         return FileResponse(index_file)
-    return {"message": "Frontend not built. Run 'npm run build' in frontend directory."}
+    raise HTTPException(status_code=404, detail="Frontend not built. Run 'npm run build' in frontend directory.")
 
