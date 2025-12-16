@@ -44,7 +44,8 @@ And deploy only the frontend to Vercel.
 ## Current Configuration
 
 - `vercel.json` - Vercel configuration
-- `requirements-vercel.txt` - Minimal requirements for API
+- `requirements.txt` - Minimal requirements for Vercel deployment (auto-detected by Vercel)
+- `requirements-full.txt` - Full requirements for local development
 - `.vercelignore` - Excludes heavy files from deployment
 
 ## Recommended Approach
