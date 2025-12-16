@@ -511,22 +511,25 @@ async def process_job(
     
     # Check authentication - allow service role key from header for Edge Function calls
     user_id = None
+    is_service_call = False
+    
     if user:
         user_id = user.get("id")
     else:
         # Try to get service key from header (for Edge Function calls)
-        # Note: This is a simplified check - in production, use proper JWT validation
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-            # In production, verify this is a valid service role key
-            # For now, we'll allow it if user is None (Edge Function call)
-            pass
+            # Verify this is the service role key
+            if token == settings.SUPABASE_SERVICE_ROLE_KEY:
+                is_service_call = True
+            else:
+                raise HTTPException(status_code=401, detail="Invalid service key")
         else:
             raise HTTPException(status_code=401, detail="Authentication required")
     
     # Verify ownership (skip if called with service key)
-    if user_id and job.get("user_id") != user_id:
+    if not is_service_call and user_id and job.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Check if already processing or completed
