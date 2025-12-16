@@ -19,7 +19,10 @@ export default defineConfig(({ mode }) => {
       }
     ],
     resolve: {
-      extensions: ['.js', '.jsx', '.json']
+      extensions: ['.js', '.jsx', '.json', '.ts', '.tsx'],
+      alias: {
+        '@': '/src'
+      }
     },
     server: {
       port: 5173,
