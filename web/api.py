@@ -236,7 +236,7 @@ async def login(login_data: LoginRequest):
         })
         
         if response.user and response.session:
-            return {
+            return JSONResponse({
                 "access_token": response.session.access_token,
                 "refresh_token": response.session.refresh_token,
                 "user": {
@@ -244,7 +244,7 @@ async def login(login_data: LoginRequest):
                     "email": response.user.email,
                     "user_metadata": response.user.user_metadata or {}
                 }
-            }
+            })
         else:
             raise HTTPException(status_code=401, detail="Invalid username or password")
             
