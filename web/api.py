@@ -1,6 +1,6 @@
 """FastAPI application with Supabase Auth"""
 
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -63,7 +63,6 @@ if static_dir.exists():
 
 # In-memory storage for pipeline jobs (use Redis in production)
 pipeline_jobs: Dict[str, Dict[str, Any]] = {}
-progress_connections: Dict[str, List[WebSocket]] = {}
 
 
 # Pydantic models for request validation
@@ -137,15 +136,15 @@ class WebUserPrompt:
             "question": question
         })
         pipeline_jobs[self.job_id]["questions"] = self.pending_questions
-        # In real implementation, wait for WebSocket response
+        # In real implementation, wait for user response via polling
         # For now, default to yes
         return True
-    
-    async def select_domain(self):
-        """Domain selection"""
-        # Would prompt user via WebSocket
-        from core.enums import Domain
-        return Domain.FINANCIAL  # Default
+        
+        async def select_domain(self):
+            """Domain selection"""
+            # Would prompt user via polling/API
+            from core.enums import Domain
+            return Domain.FINANCIAL  # Default
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
@@ -370,7 +369,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 "question": question
             })
             pipeline_jobs[self.job_id]["questions"] = self.pending_questions
-            # In real implementation, wait for WebSocket response
+            # In real implementation, wait for user response via polling
             # For now, default to yes
             return True
         
@@ -469,7 +468,7 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
     return {"message": "Download endpoint - implement based on output structure"}
 
 
-# Polling endpoint for progress updates (replaces WebSocket for Vercel compatibility)
+# Polling endpoint for progress updates
 @app.get("/api/pipeline/jobs/{job_id}/status")
 async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
     """Get current job status for polling"""
@@ -491,33 +490,6 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
         "error": job.get("error"),
         "updated_at": job.get("updated_at")
     }
-
-
-# WebSocket endpoint (kept for local development, not supported on Vercel)
-# Use polling endpoint /api/pipeline/jobs/{job_id}/status instead
-@app.websocket("/ws/progress/{job_id}")
-async def websocket_progress(websocket: WebSocket, job_id: str):
-    """WebSocket endpoint for real-time progress updates (local dev only)"""
-    await websocket.accept()
-    
-    if job_id not in progress_connections:
-        progress_connections[job_id] = []
-    progress_connections[job_id].append(websocket)
-    
-    try:
-        # Send current status if job exists
-        if job_id in pipeline_jobs:
-            await websocket.send_json({
-                "type": "status",
-                "data": pipeline_jobs[job_id]
-            })
-        
-        # Keep connection alive
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        if job_id in progress_connections:
-            progress_connections[job_id].remove(websocket)
 
 
 # Serve frontend
