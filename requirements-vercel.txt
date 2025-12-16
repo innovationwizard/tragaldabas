@@ -14,6 +14,9 @@ pydantic-settings>=2.1.0
 # Supabase Auth (required for API)
 supabase>=2.0.0
 
+# Vercel adapter for FastAPI
+mangum>=0.17.0
+
 # Configuration
 python-dotenv>=1.0.0
 

@@ -5,7 +5,7 @@
   "installCommand": "pip install -r requirements-vercel.txt",
   "framework": null,
   "functions": {
-    "web/api.py": {
+    "api/**/*.py": {
       "runtime": "python3.12",
       "maxDuration": 60,
       "memory": 3008
@@ -14,11 +14,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/web/api.py"
+      "dest": "/api/index.py"
     },
     {
       "src": "/ws/(.*)",
-      "dest": "/web/api.py"
+      "dest": "/api/index.py"
     },
     {
       "src": "/(.*)",
