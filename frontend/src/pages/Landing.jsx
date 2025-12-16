@@ -19,10 +19,10 @@ const Landing = () => {
           </p>
 
           <div className="flex justify-center space-x-4 mb-20">
-            {/* <Link to="/register" className="btn-primary">
+            {/* <Link to="/register" className="btn-secondary">
               Get Started
             </Link> */}
-            <Link to="/login" className="btn-secondary">
+            <Link to="/login" className="btn-primary">
               Sign In
             </Link>
           </div>
