@@ -12,8 +12,8 @@ if parent_dir not in sys.path:
 from web.api import app
 
 # Vercel natively supports ASGI apps like FastAPI
-# No need for Mangum adapter (which is for AWS Lambda)
-# Export the FastAPI app directly - Vercel will handle it
+# Export as both 'app' and 'handler' for compatibility
+handler = app
 
 # Optional: For local testing
 if __name__ == "__main__":
