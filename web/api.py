@@ -520,7 +520,7 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
 
 # Serve frontend (catch-all route for SPA)
 @app.get("/{full_path:path}")
-async def serve_frontend(full_path: str, request: Request):
+async def serve_frontend(full_path: str):
     """Serve frontend app - handles all non-API routes"""
     # Skip API routes (already handled above)
     if full_path.startswith("api/") and full_path != "api/index":
