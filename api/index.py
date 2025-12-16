@@ -2,10 +2,18 @@
 
 from mangum import Mangum
 import sys
+import os
 from pathlib import Path
 
-# Add parent directory to path so we can import web.api
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add parent directory to path so we can import web.api and config
+parent_dir = str(Path(__file__).parent.parent)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+# Also add current directory to path
+current_dir = str(Path(__file__).parent)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 from web.api import app
 
