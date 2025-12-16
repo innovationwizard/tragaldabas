@@ -63,10 +63,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static files
+# Static files - serve frontend build
 static_dir = Path(__file__).parent.parent / "frontend" / "dist"
 if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    # Mount static files directory - serves JS, CSS, images, etc.
+    # This must be mounted before the catch-all route
+    app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+    # Also serve files directly from dist root (for index.html and other root files)
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 # In-memory storage for pipeline jobs (use Redis in production)
 pipeline_jobs: Dict[str, Dict[str, Any]] = {}
