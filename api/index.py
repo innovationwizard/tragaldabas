@@ -16,5 +16,9 @@ from mangum import Mangum
 
 # Create Mangum handler for Vercel
 # Note: WebSockets are not supported in Vercel serverless functions
-handler = Mangum(app, lifespan="off")
+_mangum_handler = Mangum(app, lifespan="off")
+
+# Export handler as a function for Vercel
+def handler(event, context):
+    return _mangum_handler(event, context)
 
