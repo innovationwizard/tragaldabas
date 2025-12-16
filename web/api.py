@@ -74,8 +74,48 @@ if static_dir.exists():
     # Mount root static files (favicon, logo, etc.)
     # Note: We don't mount "/" here to avoid conflicts with catch-all route
 
-# In-memory storage for pipeline jobs (use Redis in production)
-pipeline_jobs: Dict[str, Dict[str, Any]] = {}
+# Helper functions for Supabase database operations
+async def get_job_from_db(job_id: str) -> Optional[Dict[str, Any]]:
+    """Get job from Supabase database"""
+    if not supabase:
+        return None
+    try:
+        response = supabase.table("pipeline_jobs").select("*").eq("id", job_id).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+    except Exception as e:
+        print(f"Error fetching job from DB: {e}")
+    return None
+
+async def update_job_in_db(job_id: str, updates: Dict[str, Any]):
+    """Update job in Supabase database"""
+    if not supabase:
+        return
+    try:
+        updates["updated_at"] = datetime.utcnow().isoformat()
+        supabase.table("pipeline_jobs").update(updates).eq("id", job_id).execute()
+    except Exception as e:
+        print(f"Error updating job in DB: {e}")
+
+async def create_job_in_db(job_data: Dict[str, Any]):
+    """Create job in Supabase database"""
+    if not supabase:
+        return
+    try:
+        supabase.table("pipeline_jobs").insert(job_data).execute()
+    except Exception as e:
+        print(f"Error creating job in DB: {e}")
+
+async def list_user_jobs_from_db(user_id: str) -> List[Dict[str, Any]]:
+    """List all jobs for a user from Supabase database"""
+    if not supabase:
+        return []
+    try:
+        response = supabase.table("pipeline_jobs").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        return response.data or []
+    except Exception as e:
+        print(f"Error listing jobs from DB: {e}")
+        return []
 
 
 # Pydantic models for request validation
@@ -134,7 +174,7 @@ class WebProgressTracker:
 
 
 class WebUserPrompt:
-    """Web-based user prompt - inherits from UserPrompt (lazy import)"""
+    """Web-based user prompt - stores questions in Supabase database"""
     
     def __init__(self, job_id: str):
         self.job_id = job_id
@@ -148,16 +188,17 @@ class WebUserPrompt:
             "type": "yes_no",
             "question": question
         })
-        pipeline_jobs[self.job_id]["questions"] = self.pending_questions
+        # Update questions in database
+        asyncio.create_task(update_job_in_db(self.job_id, {"questions": self.pending_questions}))
         # In real implementation, wait for user response via polling
         # For now, default to yes
         return True
         
-        async def select_domain(self):
-            """Domain selection"""
-            # Would prompt user via polling/API
-            from core.enums import Domain
-            return Domain.FINANCIAL  # Default
+    async def select_domain(self):
+        """Domain selection"""
+        # Would prompt user via polling/API
+        from core.enums import Domain
+        return Domain.FINANCIAL  # Default
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
@@ -488,13 +529,13 @@ async def list_jobs(user: dict = Depends(get_current_user)):
 
 @app.get("/api/pipeline/jobs/{job_id}")
 async def get_job(job_id: str, user: dict = Depends(get_current_user)):
-    """Get pipeline job details"""
+    """Get pipeline job details from Supabase database"""
     user_id = user.get("id")
     
-    if job_id not in pipeline_jobs:
+    job = await get_job_from_db(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    job = pipeline_jobs[job_id]
     if job.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -521,23 +562,13 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
 # Polling endpoint for progress updates
 @app.get("/api/pipeline/jobs/{job_id}/status")
 async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
-    """Get current job status for polling"""
+    """Get current job status for polling from Supabase database"""
     user_id = user.get("id")
     
-    if job_id not in pipeline_jobs:
-        # In serverless functions, in-memory storage is lost between invocations
-        # Return a default status instead of 404 to prevent polling errors
-        return {
-            "id": job_id,
-            "status": "unknown",
-            "current_stage": None,
-            "current_stage_name": None,
-            "completed_stages": [],
-            "error": "Job not found in current session. Jobs are stored in-memory and may be lost between serverless function invocations.",
-            "updated_at": None
-        }
+    job = await get_job_from_db(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
     
-    job = pipeline_jobs[job_id]
     if job.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -546,7 +577,7 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
         "status": job.get("status"),
         "current_stage": job.get("current_stage"),
         "current_stage_name": job.get("current_stage_name"),
-        "completed_stages": job.get("completed_stages", []),
+        "completed_stages": job.get("completed_stages", []) or [],
         "error": job.get("error"),
         "updated_at": job.get("updated_at")
     }

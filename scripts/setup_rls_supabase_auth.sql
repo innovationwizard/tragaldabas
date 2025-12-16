@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    current_stage INTEGER,
+    current_stage_name TEXT,
+    completed_stages INTEGER[] DEFAULT '{}',
+    failed_stage INTEGER,
     questions JSONB,
     result JSONB,
     error TEXT
