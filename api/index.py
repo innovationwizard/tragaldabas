@@ -12,11 +12,6 @@ if parent_dir not in sys.path:
 from web.api import app
 
 # Vercel natively supports ASGI apps like FastAPI
-# Export as both 'app' and 'handler' for compatibility
-handler = app
-
-# Optional: For local testing
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Export the FastAPI app - Vercel will detect it automatically
+# Do not export as 'handler' - let Vercel auto-detect from 'app'
 
