@@ -552,10 +552,27 @@ async def process_job(
         raise HTTPException(status_code=404, detail="File not found. Files must be stored in Supabase Storage for processing.")
     
     # Run pipeline
+    # Note: Pipeline processing requires heavy dependencies (pandas, numpy, LLM libraries)
+    # which exceed Vercel's 250 MB limit. This endpoint should be called from a separate worker.
     try:
         user_id = job.get("user_id")  # Use job's user_id
+        
+        # Check if pipeline dependencies are available
+        try:
+            import pandas
+            import numpy
+        except ImportError:
+            raise HTTPException(
+                status_code=503,
+                detail="Pipeline processing unavailable. Heavy dependencies not installed. "
+                       "Please use a separate worker service for pipeline processing. "
+                       "See docs/DEPLOYMENT.md for options."
+            )
+        
         await run_pipeline(job_id, str(file_path), user_id)
         return {"message": "Job processed successfully", "job_id": job_id}
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         error_msg = str(e)
