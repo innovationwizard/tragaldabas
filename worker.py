@@ -18,8 +18,14 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from web.api import process_job, get_job_from_db, update_job_in_db
-from config import settings
+# Import web.api modules - handle import errors gracefully
+try:
+    from web.api import process_job, get_job_from_db, update_job_in_db
+    from config import settings
+except ImportError as e:
+    print(f"Warning: Could not import web.api: {e}")
+    print("Make sure all dependencies are installed from requirements-full.txt")
+    raise
 
 app = FastAPI(title="Tragaldabas Pipeline Worker")
 
