@@ -4,7 +4,7 @@ Pipeline Worker Service
 Deploy this to Railway, Render, or Fly.io with requirements-full.txt
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.requests import Request
