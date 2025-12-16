@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import axios from 'axios'
 // Use absolute path from src root
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase.js'
 
 const AuthContext = createContext()
 
