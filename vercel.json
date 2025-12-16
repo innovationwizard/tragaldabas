@@ -4,12 +4,6 @@
   "outputDirectory": "frontend/dist",
   "installCommand": "pip install -r requirements.txt",
   "framework": null,
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python"
-    }
-  ],
   "functions": {
     "api/**/*.py": {
       "maxDuration": 60,
