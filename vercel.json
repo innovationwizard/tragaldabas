@@ -13,17 +13,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "dest": "/api/index.py?handler=handler"
     },
     {
       "src": "/(.*)",
       "dest": "/$1"
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index.py"
     }
   ]
 }
