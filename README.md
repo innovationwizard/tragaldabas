@@ -4,7 +4,7 @@
 
 # Tragaldabas - Universal Data Ingestor
 
-AI-powered universal data ingestor that transforms raw, unstructured client files into actionable business intelligence.
+Transform raw files into actionable business intelligence.
 
 ## Features
 

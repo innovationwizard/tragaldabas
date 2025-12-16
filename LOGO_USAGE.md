@@ -26,7 +26,7 @@ This document provides code snippets for using the Tragaldabas logo, favicon, an
     
     <!-- OpenGraph / Social Media Meta Tags -->
     <meta property="og:title" content="Tragaldabas - Universal Data Ingestor">
-    <meta property="og:description" content="AI-powered universal data ingestor that transforms raw, unstructured client files into actionable business intelligence.">
+    <meta property="og:description" content="Transform raw files into actionable business intelligence.">
     <meta property="og:image" content="/tragaldabas-og.png">
     <meta property="og:image:width" content="512">
     <meta property="og:image:height" content="512">
@@ -137,7 +137,7 @@ async def landing():
   <img src="tragaldabas-logo.svg" alt="Tragaldabas Logo" width="128" height="128">
 </div>
 
-AI-powered universal data ingestor that transforms raw, unstructured client files into actionable business intelligence.
+Transform raw files into actionable business intelligence.
 ```
 
 ### Logo with Link

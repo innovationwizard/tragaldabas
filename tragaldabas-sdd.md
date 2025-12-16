@@ -10,7 +10,7 @@
 
 ### 1.1 Purpose
 
-Tragaldabas is an AI-powered universal data ingestor that transforms raw, unstructured client files into actionable business intelligence. The system autonomously detects file structure, classifies content domain, infers semantic meaning, cleans and validates data, persists it into PostgreSQL, and generates executive-level insights with board-ready presentation slides.
+Tragaldabas is an Transform raw files into actionable business intelligence. The system autonomously detects file structure, classifies content domain, infers semantic meaning, cleans and validates data, persists it into PostgreSQL, and generates executive-level insights with board-ready presentation slides.
 
 ### 1.2 Scope (MVP)
 
