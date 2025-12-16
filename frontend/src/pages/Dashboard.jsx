@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
+import { supabase } from '../lib/supabase'
 import Layout from '../components/Layout'
 
 const Dashboard = () => {

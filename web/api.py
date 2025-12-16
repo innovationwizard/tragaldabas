@@ -299,17 +299,26 @@ async def upload_file(
     """Upload file and start pipeline"""
     # Lazy import to reduce serverless function size
     from config import settings
+    import tempfile
     
     job_id = str(uuid.uuid4())
     
-    # Save uploaded file
-    upload_dir = Path(settings.OUTPUT_DIR) / "uploads" / job_id
+    # Save uploaded file - use /tmp for Vercel serverless compatibility
+    # Vercel provides /tmp directory that persists during function execution
+    output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
+    upload_dir = Path(output_dir) / "uploads" / job_id
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / file.filename
     
-    with open(file_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
+    try:
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+    except Exception as e:
+        import traceback
+        print(f"Error saving file: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     
     # Initialize job
     user_id = user.get("id")
