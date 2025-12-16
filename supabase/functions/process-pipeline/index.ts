@@ -52,14 +52,12 @@ serve(async (req) => {
       .eq('id', job_id)
 
     // Call Vercel API to process the job
-    // Note: This requires the Vercel API to have an endpoint that processes jobs
-    // For now, we'll call the process endpoint
+    // Use service role key for authentication (passed as Bearer token)
     const vercelResponse = await fetch(`${VERCEL_API_URL}/api/pipeline/process/${job_id}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Note: You'll need to pass authentication or use service role
-        'Authorization': `Bearer ${supabaseServiceKey}` // This won't work - need proper auth
+        'Authorization': `Bearer ${supabaseServiceKey}`
       },
     })
 
