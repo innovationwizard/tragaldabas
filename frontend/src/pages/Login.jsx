@@ -74,14 +74,14 @@ const Login = () => {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          {/* <div className="mt-6 text-center">
             <p className="text-brand-muted text-sm">
               Don't have an account?{' '}
               <Link to="/register" className="text-brand-primary hover:underline">
                 Sign up
               </Link>
             </p>
-          </div>
+          </div> */}
         </div>
       </div>
     </Layout>
