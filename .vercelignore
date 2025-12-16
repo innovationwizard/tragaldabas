@@ -48,12 +48,13 @@ test_*.py
 
 # Large dependencies that aren't needed at import time
 # These will be imported lazily when needed
-stages/
-core/
-llm/
-utils/
-ui/
-orchestrator.py
-main.py
+# NOTE: These modules ARE needed for pipeline execution, so they must be deployed
+# stages/  # Needed for pipeline stages
+# core/    # Needed for core models and enums
+# llm/     # Needed for LLM integration
+# utils/   # Needed for utilities
+# ui/      # Needed for progress tracking and prompts
+# orchestrator.py  # Needed to run the pipeline
+# main.py  # CLI entry point - not needed for web API
 # Note: config.py is needed for settings, so it's NOT ignored
 
