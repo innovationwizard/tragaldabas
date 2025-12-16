@@ -1,5 +1,5 @@
 # Minimal requirements for Vercel deployment
-# Only include essential packages for the API
+# Includes essential packages for API and pipeline processing
 
 # Web framework (required)
 fastapi>=0.104.0
@@ -17,6 +17,29 @@ supabase>=2.0.0
 # Configuration
 python-dotenv>=1.0.0
 
-# Note: Heavy dependencies like pandas, numpy, LLM libraries are loaded lazily
-# when needed, not at import time, to reduce serverless function size
+# Data processing (required for pipeline stages)
+pandas>=2.2.0
+numpy>=1.26.0
+openpyxl>=3.1.2  # For Excel files
+python-docx>=1.1.0  # For Word files
+
+# Utilities (required for file parsing)
+chardet>=5.2.0  # Encoding detection
+rapidfuzz>=3.5.2  # Fuzzy matching
+python-dateutil>=2.8.2  # Date parsing
+
+# LLM providers (required for pipeline processing)
+# At least one must be configured via environment variables
+anthropic>=0.18.0
+openai>=1.12.0
+google-generativeai>=0.3.0
+
+# Database (required for pipeline)
+psycopg2-binary>=2.9.9
+
+# Output (required for pipeline)
+python-pptx>=0.6.23  # PowerPoint output
+
+# Note: These dependencies are needed because pipeline modules are now deployed
+# They are imported lazily when pipeline runs, not at API startup
 
