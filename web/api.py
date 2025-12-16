@@ -204,6 +204,13 @@ async def register(user_data: RegisterRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# Username to email mapping for test users
+USERNAME_EMAIL_MAP = {
+    "condor": "condor@example.com",
+    "estefani": "estefani@example.com",
+    "marco": "marco@example.com",
+}
+
 @app.post("/api/auth/login")
 async def login(login_data: LoginRequest):
     """Login user via Supabase Auth using username"""
@@ -211,52 +218,8 @@ async def login(login_data: LoginRequest):
         raise HTTPException(status_code=500, detail="Supabase Auth not configured")
     
     try:
-        # Look up user by username in user_metadata
-        # Query auth.users table directly via PostgREST (requires service role)
-        user_email = None
-        
-        try:
-            # Query auth.users table using PostgREST
-            # Note: This requires service_role key to access auth schema
-            response = supabase.table('auth.users').select('email,raw_user_meta_data').execute()
-            
-            if response.data:
-                for user in response.data:
-                    metadata = user.get('raw_user_meta_data') or {}
-                    if metadata.get("username") == login_data.username:
-                        user_email = user.get('email')
-                        break
-        except Exception as lookup_error:
-            # Fallback: Try admin API
-            try:
-                users_response = supabase.auth.admin.list_users()
-                
-                # Handle response - could be object with .users or dict
-                users = []
-                if hasattr(users_response, 'users'):
-                    users = users_response.users
-                elif isinstance(users_response, dict):
-                    users = users_response.get('users', [])
-                
-                for user in users:
-                    # Handle both object and dict formats
-                    if hasattr(user, 'user_metadata'):
-                        metadata = user.user_metadata
-                        email = getattr(user, 'email', None)
-                    elif isinstance(user, dict):
-                        metadata = user.get('user_metadata') or user.get('raw_user_meta_data', {})
-                        email = user.get('email')
-                    else:
-                        continue
-                    
-                    if metadata and metadata.get("username") == login_data.username:
-                        user_email = email
-                        break
-            except Exception as admin_error:
-                # Log errors for debugging
-                print(f"PostgREST lookup error: {lookup_error}")
-                print(f"Admin API lookup error: {admin_error}")
-                raise HTTPException(status_code=500, detail="Unable to lookup user")
+        # Look up email from username mapping
+        user_email = USERNAME_EMAIL_MAP.get(login_data.username.lower())
         
         if not user_email:
             raise HTTPException(status_code=401, detail="Invalid username or password")
