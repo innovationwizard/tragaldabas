@@ -14,9 +14,6 @@ email-validator>=2.0.0  # Required for EmailStr validation
 # Supabase Auth (required for API)
 supabase>=2.0.0
 
-# Vercel adapter for FastAPI
-mangum>=0.17.0
-
 # Configuration
 python-dotenv>=1.0.0
 
