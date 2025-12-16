@@ -40,7 +40,7 @@ const Landing = () => {
               <div className="text-brand-primary text-3xl mb-4">📊</div>
               <h3 className="text-xl font-semibold mb-2">Multi-Format Support</h3>
               <p className="text-brand-muted">
-                Excel (.xlsx, .xls), CSV, Word (.docx) - handles any format
+                Excel (.xlsx, .xls), CSV, Word (.docx), PowerPoint (.pptx) - handles more formats than you do!
               </p>
             </div>
             
@@ -48,7 +48,7 @@ const Landing = () => {
               <div className="text-brand-primary text-3xl mb-4">🤖</div>
               <h3 className="text-xl font-semibold mb-2">LLM-Powered</h3>
               <p className="text-brand-muted">
-                Multi-provider support with automatic fallback and intelligent classification
+                Multi-engine, multi-model, multi-layer learning design, with industrial-grade reliability.
               </p>
             </div>
           </div>
