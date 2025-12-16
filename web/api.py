@@ -518,13 +518,15 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
     }
 
 
-# Serve frontend
+# Serve frontend (catch-all route for SPA)
 @app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    """Serve frontend app"""
-    if full_path.startswith("api/") or full_path.startswith("ws/"):
+async def serve_frontend(full_path: str, request: Request):
+    """Serve frontend app - handles all non-API routes"""
+    # Skip API routes (already handled above)
+    if full_path.startswith("api/") and full_path != "api/index":
         raise HTTPException(status_code=404)
     
+    # Serve index.html for all frontend routes (React Router handles routing)
     index_file = static_dir / "index.html"
     if index_file.exists():
         return FileResponse(index_file)
