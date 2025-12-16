@@ -349,21 +349,35 @@ async def upload_file(
     # Create job in database (synchronous call)
     create_job_in_db(job_data)
     
-    # Note: In Vercel serverless functions, asyncio.create_task() doesn't persist
-    # after the function returns. We need to trigger processing via:
-    # 1. Supabase Edge Function (recommended)
-    # 2. External worker service
-    # 3. Database trigger + pg_cron
-    # For now, try to start processing immediately (may timeout for long jobs)
-    try:
-        # Try to process immediately - this will work for short jobs
-        # For long jobs, this will timeout and need to be handled by Edge Function
-        asyncio.create_task(run_pipeline(job_id, str(file_path), user_id))
-    except Exception as e:
-        print(f"Warning: Could not start pipeline task: {e}")
-        # Job will remain pending and can be processed by Edge Function
+    # Trigger Edge Function to process the job asynchronously
+    # This is more reliable than database triggers and works immediately
+    edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
     
-    return {"job_id": job_id, "status": "started"}
+    async def trigger_edge_function():
+        """Fire-and-forget call to Edge Function"""
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(
+                    edge_function_url,
+                    json={"job_id": job_id},
+                    headers={
+                        "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                )
+        except Exception as e:
+            print(f"Warning: Could not trigger Edge Function: {e}")
+            import traceback
+            print(traceback.format_exc())
+    
+    # Fire and forget - don't wait for response
+    try:
+        asyncio.create_task(trigger_edge_function())
+    except Exception as e:
+        print(f"Warning: Could not create task for Edge Function: {e}")
+    
+    return {"job_id": job_id, "status": "pending", "message": "Job created, processing will start shortly"}
 
 
 async def run_pipeline(job_id: str, file_path: str, user_id: str):
