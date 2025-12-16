@@ -55,21 +55,43 @@ export const AuthProvider = ({ children }) => {
         password,
       })
       
-      if (response.data.access_token) {
+      if (response.data.access_token && response.data.refresh_token) {
         // Set the session manually since we're using backend API
-        await supabase.auth.setSession({
+        const { data: { session }, error: sessionError } = await supabase.auth.setSession({
           access_token: response.data.access_token,
           refresh_token: response.data.refresh_token,
         })
         
+        if (sessionError) {
+          console.error('Session error:', sessionError)
+          throw new Error('Failed to set session: ' + sessionError.message)
+        }
+        
         // Set axios default auth header
         axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
         
-        // Get the user from the session
-        const { data: { user } } = await supabase.auth.getUser()
-        return user
+        // Return the user from the response or session
+        if (response.data.user) {
+          setUser(response.data.user)
+          return response.data.user
+        } else if (session?.user) {
+          setUser(session.user)
+          return session.user
+        } else {
+          // Fallback: get user from Supabase
+          const { data: { user }, error: userError } = await supabase.auth.getUser()
+          if (userError) {
+            console.error('Get user error:', userError)
+            throw new Error('Failed to get user: ' + userError.message)
+          }
+          setUser(user)
+          return user
+        }
+      } else {
+        throw new Error('No access token received')
       }
     } catch (error) {
+      console.error('Login error:', error)
       if (error.response) {
         throw new Error(error.response.data.detail || 'Login failed')
       }
