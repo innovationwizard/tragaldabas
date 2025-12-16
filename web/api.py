@@ -175,7 +175,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user_response = supabase.auth.get_user(token)
         if not user_response.user:
             raise HTTPException(status_code=401, detail="Invalid token")
-        return user_response.user
+        
+        # Convert Supabase User object to dict
+        user = user_response.user
+        return {
+            "id": user.id,
+            "email": user.email,
+            "user_metadata": user.user_metadata or {},
+            "created_at": user.created_at,
+            "email_confirmed": user.email_confirmed_at is not None
+        }
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
