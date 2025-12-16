@@ -47,11 +47,13 @@ app = FastAPI(
 
 # CORS middleware
 # Allow origins from environment or default to localhost for development
-# Also allow Vercel deployment URLs
+# Also allow Vercel deployment URLs and production URLs
 cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
 vercel_url = os.getenv("VERCEL_URL")
 if vercel_url:
     cors_origins_str += f",https://{vercel_url}"
+# Add production URLs
+cors_origins_str += ",https://tragaldabas.app,https://tragaldabas.vercel.app"
 cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
 app.add_middleware(
     CORSMiddleware,

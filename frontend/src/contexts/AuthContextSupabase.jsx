@@ -64,29 +64,47 @@ export const AuthProvider = ({ children }) => {
         
         if (sessionError) {
           console.error('Session error:', sessionError)
-          throw new Error('Failed to set session: ' + sessionError.message)
+          // Don't throw - try to continue with the tokens we have
         }
         
         // Set axios default auth header
         axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
         
-        // Return the user from the response or session
+        // Use user from response if available (more reliable)
         if (response.data.user) {
           setUser(response.data.user)
           return response.data.user
-        } else if (session?.user) {
+        } 
+        
+        // Fallback to session user
+        if (session?.user) {
           setUser(session.user)
           return session.user
-        } else {
-          // Fallback: get user from Supabase
-          const { data: { user }, error: userError } = await supabase.auth.getUser()
-          if (userError) {
-            console.error('Get user error:', userError)
-            throw new Error('Failed to get user: ' + userError.message)
-          }
-          setUser(user)
-          return user
         }
+        
+        // Last resort: try to get user from Supabase (may fail with 401)
+        try {
+          const { data: { user }, error: userError } = await supabase.auth.getUser()
+          if (!userError && user) {
+            setUser(user)
+            return user
+          }
+        } catch (err) {
+          console.warn('Could not get user from Supabase, but login succeeded:', err)
+        }
+        
+        // If we have tokens but no user, create a minimal user object
+        if (response.data.access_token) {
+          const minimalUser = {
+            id: response.data.user?.id || 'unknown',
+            email: response.data.user?.email || login_data.username,
+            user_metadata: response.data.user?.user_metadata || {}
+          }
+          setUser(minimalUser)
+          return minimalUser
+        }
+        
+        throw new Error('No user data available')
       } else {
         throw new Error('No access token received')
       }
