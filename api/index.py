@@ -11,10 +11,12 @@ if parent_dir not in sys.path:
 # Import app after path is set up
 from web.api import app
 
-# Import Mangum after app is imported  
-from mangum import Mangum
+# Vercel natively supports ASGI apps like FastAPI
+# No need for Mangum adapter (which is for AWS Lambda)
+# Export the FastAPI app directly - Vercel will handle it
 
-# Create Mangum handler for Vercel
-# Note: WebSockets are not supported in Vercel serverless functions
-handler = Mangum(app, lifespan="off")
+# Optional: For local testing
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
