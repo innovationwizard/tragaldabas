@@ -212,14 +212,75 @@ async def login(login_data: LoginRequest):
     
     try:
         # Look up user by username in user_metadata
-        # Get all users and find the one with matching username
-        users_response = supabase.auth.admin.list_users()
-        
+        # Query auth.users table via PostgREST to find user by username in metadata
         user_email = None
-        for user in users_response.users:
-            if user.user_metadata and user.user_metadata.get("username") == login_data.username:
-                user_email = user.email
-                break
+        
+        try:
+            # Use admin API to list users and find by username
+            # Note: This requires service role key and may be paginated
+            users_response = supabase.auth.admin.list_users()
+            
+            # Handle different response structures
+            users = []
+            if hasattr(users_response, 'users'):
+                users = users_response.users
+            elif isinstance(users_response, dict) and 'users' in users_response:
+                users = users_response['users']
+            elif isinstance(users_response, list):
+                users = users_response
+            
+            for user in users:
+                # Handle different user object structures
+                metadata = None
+                email = None
+                
+                if hasattr(user, 'user_metadata'):
+                    metadata = user.user_metadata
+                    email = user.email if hasattr(user, 'email') else None
+                elif isinstance(user, dict):
+                    metadata = user.get('user_metadata') or user.get('raw_user_meta_data')
+                    email = user.get('email')
+                else:
+                    continue
+                
+                if metadata and metadata.get("username") == login_data.username:
+                    user_email = email
+                    break
+                    
+        except Exception as lookup_error:
+            # If admin API fails, try alternative: query via database
+            # This requires DATABASE_URL to be set
+            import os
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                try:
+                    import asyncpg
+                    import asyncio
+                    
+                    # Parse database URL and connect
+                    # Extract connection details from DATABASE_URL
+                    conn = await asyncpg.connect(database_url)
+                    result = await conn.fetchrow(
+                        """
+                        SELECT email, raw_user_meta_data 
+                        FROM auth.users 
+                        WHERE raw_user_meta_data->>'username' = $1
+                        LIMIT 1
+                        """,
+                        login_data.username
+                    )
+                    await conn.close()
+                    
+                    if result:
+                        user_email = result['email']
+                except Exception:
+                    # Database query failed, continue with error
+                    pass
+            
+            if not user_email:
+                # Log the error for debugging but don't expose it
+                print(f"Error looking up user: {lookup_error}")
+                raise HTTPException(status_code=401, detail="Invalid username or password")
         
         if not user_email:
             raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -246,6 +307,10 @@ async def login(login_data: LoginRequest):
     except HTTPException:
         raise
     except Exception as e:
+        # Log the actual error for debugging
+        import traceback
+        print(f"Login error: {e}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
 
