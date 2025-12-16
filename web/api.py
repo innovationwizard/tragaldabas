@@ -75,7 +75,8 @@ if static_dir.exists():
     # Note: We don't mount "/" here to avoid conflicts with catch-all route
 
 # Helper functions for Supabase database operations
-async def get_job_from_db(job_id: str) -> Optional[Dict[str, Any]]:
+# Note: Supabase Python client is synchronous, so these are sync functions
+def get_job_from_db(job_id: str) -> Optional[Dict[str, Any]]:
     """Get job from Supabase database"""
     if not supabase:
         return None
@@ -87,8 +88,8 @@ async def get_job_from_db(job_id: str) -> Optional[Dict[str, Any]]:
         print(f"Error fetching job from DB: {e}")
     return None
 
-async def update_job_in_db(job_id: str, updates: Dict[str, Any]):
-    """Update job in Supabase database"""
+def update_job_in_db(job_id: str, updates: Dict[str, Any]):
+    """Update job in Supabase database (synchronous)"""
     if not supabase:
         return
     try:
@@ -97,8 +98,8 @@ async def update_job_in_db(job_id: str, updates: Dict[str, Any]):
     except Exception as e:
         print(f"Error updating job in DB: {e}")
 
-async def create_job_in_db(job_data: Dict[str, Any]):
-    """Create job in Supabase database"""
+def create_job_in_db(job_data: Dict[str, Any]):
+    """Create job in Supabase database (synchronous)"""
     if not supabase:
         return
     try:
@@ -106,8 +107,8 @@ async def create_job_in_db(job_data: Dict[str, Any]):
     except Exception as e:
         print(f"Error creating job in DB: {e}")
 
-async def list_user_jobs_from_db(user_id: str) -> List[Dict[str, Any]]:
-    """List all jobs for a user from Supabase database"""
+def list_user_jobs_from_db(user_id: str) -> List[Dict[str, Any]]:
+    """List all jobs for a user from Supabase database (synchronous)"""
     if not supabase:
         return []
     try:
@@ -344,8 +345,8 @@ async def upload_file(
         "questions": []
     }
     
-    # Create job in database
-    await create_job_in_db(job_data)
+    # Create job in database (synchronous call)
+    create_job_in_db(job_data)
     
     # Start pipeline asynchronously
     asyncio.create_task(run_pipeline(job_id, str(file_path), user_id))
@@ -374,38 +375,36 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         def start_stage(self, stage_num: int, stage_name: str):
             self.current_stage = stage_num
             self.stage_name = stage_name
-            # Update job in database for polling
-            asyncio.create_task(update_job_in_db(self.job_id, {
+            # Update job in database for polling (synchronous call)
+            update_job_in_db(self.job_id, {
                 "current_stage": stage_num,
                 "current_stage_name": stage_name
-            }))
+            })
         
         def complete_stage(self, stage_num: int):
             # Get current completed stages and update
-            async def update_completed():
-                job = await get_job_from_db(self.job_id)
-                if job:
-                    completed = job.get("completed_stages", []) or []
-                    if stage_num not in completed:
-                        completed.append(stage_num)
-                        await update_job_in_db(self.job_id, {"completed_stages": completed})
-            asyncio.create_task(update_completed())
+            job = get_job_from_db(self.job_id)
+            if job:
+                completed = job.get("completed_stages", []) or []
+                if stage_num not in completed:
+                    completed.append(stage_num)
+                    update_job_in_db(self.job_id, {"completed_stages": completed})
         
         def fail(self, stage_num: int, error: str):
-            # Update job status in database
-            asyncio.create_task(update_job_in_db(self.job_id, {
+            # Update job status in database (synchronous call)
+            update_job_in_db(self.job_id, {
                 "status": "failed",
                 "error": error,
                 "failed_stage": stage_num
-            }))
+            })
         
         def complete(self):
-            # Update job status in database
-            asyncio.create_task(update_job_in_db(self.job_id, {
+            # Update job status in database (synchronous call)
+            update_job_in_db(self.job_id, {
                 "status": "completed",
                 "current_stage": 7,  # Output stage
                 "current_stage_name": "Output"
-            }))
+            })
     
     # Make WebUserPrompt inherit from UserPrompt
     class WebUserPrompt(UserPrompt):
@@ -424,8 +423,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 "type": "yes_no",
                 "question": question
             })
-            # Update questions in database
-            asyncio.create_task(update_job_in_db(self.job_id, {"questions": self.pending_questions}))
+            # Update questions in database (synchronous call)
+            update_job_in_db(self.job_id, {"questions": self.pending_questions})
             # In real implementation, wait for user response via polling
             # For now, default to yes
             return True
@@ -437,8 +436,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             return Domain.FINANCIAL  # Default
     
     try:
-        # Update job status to running
-        await update_job_in_db(job_id, {"status": "running"})
+        # Update job status to running (synchronous call)
+        update_job_in_db(job_id, {"status": "running"})
         
         progress = WebProgressTracker(job_id)
         prompt = WebUserPrompt(job_id)
@@ -472,15 +471,15 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             "output": to_dict(ctx.output),
         }
         
-        # Update job with completed status and result
-        await update_job_in_db(job_id, {
+        # Update job with completed status and result (synchronous call)
+        update_job_in_db(job_id, {
             "status": "completed",
             "result": result
         })
         
     except Exception as e:
-        # Update job with failed status and error
-        await update_job_in_db(job_id, {
+        # Update job with failed status and error (synchronous call)
+        update_job_in_db(job_id, {
             "status": "failed",
             "error": str(e)
         })
@@ -488,9 +487,9 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
 
 @app.get("/api/pipeline/jobs")
 async def list_jobs(user: dict = Depends(get_current_user)):
-    """List user's pipeline jobs"""
+    """List user's pipeline jobs from Supabase database"""
     user_id = user.get("id")
-    jobs = await list_user_jobs_from_db(user_id)
+    jobs = list_user_jobs_from_db(user_id)  # Synchronous call
     # Remove result field for list view (too large)
     user_jobs = [
         {k: v for k, v in job.items() if k != "result"}
@@ -504,7 +503,7 @@ async def get_job(job_id: str, user: dict = Depends(get_current_user)):
     """Get pipeline job details from Supabase database"""
     user_id = user.get("id")
     
-    job = await get_job_from_db(job_id)
+    job = get_job_from_db(job_id)  # Synchronous call
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
@@ -536,7 +535,7 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
     """Get current job status for polling from Supabase database"""
     user_id = user.get("id")
     
-    job = await get_job_from_db(job_id)
+    job = get_job_from_db(job_id)  # Synchronous call
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
