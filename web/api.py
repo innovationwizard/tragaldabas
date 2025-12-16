@@ -518,7 +518,7 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
     """Download output files"""
     user_id = user.get("id")
     
-    job = await get_job_from_db(job_id)
+    job = get_job_from_db(job_id)  # Synchronous call
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.get("user_id") != user_id:
