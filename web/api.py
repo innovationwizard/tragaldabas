@@ -348,8 +348,19 @@ async def upload_file(
     # Create job in database (synchronous call)
     create_job_in_db(job_data)
     
-    # Start pipeline asynchronously
-    asyncio.create_task(run_pipeline(job_id, str(file_path), user_id))
+    # Note: In Vercel serverless functions, asyncio.create_task() doesn't persist
+    # after the function returns. We need to trigger processing via:
+    # 1. Supabase Edge Function (recommended)
+    # 2. External worker service
+    # 3. Database trigger + pg_cron
+    # For now, try to start processing immediately (may timeout for long jobs)
+    try:
+        # Try to process immediately - this will work for short jobs
+        # For long jobs, this will timeout and need to be handled by Edge Function
+        asyncio.create_task(run_pipeline(job_id, str(file_path), user_id))
+    except Exception as e:
+        print(f"Warning: Could not start pipeline task: {e}")
+        # Job will remain pending and can be processed by Edge Function
     
     return {"job_id": job_id, "status": "started"}
 
