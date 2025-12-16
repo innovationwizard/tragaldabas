@@ -1,0 +1,35 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig(({ mode }) => {
+  const baseUrl = process.env.VITE_BASE_URL || 'https://tragaldabas.com'
+  
+  return {
+    plugins: [
+      react(),
+      // Replace BASE_URL placeholder in HTML during build
+      {
+        name: 'replace-base-url',
+        transformIndexHtml: {
+          enforce: 'pre',
+          transform(html) {
+            return html.replace(/__BASE_URL__/g, baseUrl)
+          }
+        }
+      }
+    ],
+    server: {
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+        },
+        '/ws': {
+          target: 'ws://localhost:8000',
+          ws: true,
+        }
+      }
+    }
+  }
+})

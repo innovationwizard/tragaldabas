@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="tragaldabas-logo.svg">
+    <link rel="apple-touch-icon" href="tragaldabas-og.png">
+    
+    <!-- OpenGraph / WhatsApp Requirements -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://tragaldabas.com">
+    <meta property="og:title" content="Tragaldabas - Universal Data Ingestor">
+    <meta property="og:description" content="AI-powered universal data ingestor that transforms raw, unstructured client files into actionable business intelligence.">
+    <meta property="og:image" content="https://tragaldabas.com/tragaldabas-og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:site_name" content="Tragaldabas">
+    <meta property="og:locale" content="en_US">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Tragaldabas - Universal Data Ingestor">
+    <meta name="twitter:description" content="AI-powered universal data ingestor">
+    <meta name="twitter:image" content="tragaldabas-og.png">
+    
+    <title>Tragaldabas - Universal Data Ingestor</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #09090B 0%, #1a1a1a 100%);
+            color: #e5e5e5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 800px;
+        }
+        
+        .logo {
+            margin-bottom: 2rem;
+            display: inline-block;
+            transition: transform 0.3s ease;
+            filter: drop-shadow(0 0 20px rgba(217, 119, 6, 0.3));
+        }
+        
+        .logo:hover {
+            transform: scale(1.05);
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #D97706 0%, #F59E0B 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            font-size: 1.25rem;
+            color: #a3a3a3;
+            margin-bottom: 2rem;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-top: 3rem;
+        }
+        
+        .feature {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid rgba(217, 119, 6, 0.2);
+        }
+        
+        .feature h3 {
+            color: #D97706;
+            margin-bottom: 0.5rem;
+        }
+        
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            color: #D97706;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="tragaldabas-logo.svg" alt="Tragaldabas Logo" width="128" height="128">
+        </div>
+        
+        <h1>Tragaldabas</h1>
+        <p class="subtitle">Universal Data Ingestor</p>
+        
+        <p style="margin-bottom: 2rem; line-height: 1.6;">
+            AI-powered universal data ingestor that transforms raw, unstructured client files 
+            into actionable business intelligence.
+        </p>
+        
+        <div class="features">
+            <div class="feature">
+                <h3>7-Stage Pipeline</h3>
+                <p>Reception → Classification → Structure → Archaeology → Reconciliation → ETL → Analysis</p>
+            </div>
+            <div class="feature">
+                <h3>Multi-Format Support</h3>
+                <p>Excel (.xlsx, .xls), CSV, Word (.docx)</p>
+            </div>
+            <div class="feature">
+                <h3>LLM-Powered</h3>
+                <p>Multi-provider support with automatic fallback</p>
+            </div>
+        </div>
+        
+        <div style="margin-top: 3rem;">
+            <p style="color: #737373;">
+                Get started: <code>python main.py data/file.xlsx</code>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+

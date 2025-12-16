@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="tragaldabas-logo.svg" alt="Tragaldabas Logo" width="128" height="128">
+</div>
+
 # Tragaldabas - Universal Data Ingestor
 
 AI-powered universal data ingestor that transforms raw, unstructured client files into actionable business intelligence.
