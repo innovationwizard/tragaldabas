@@ -11,13 +11,16 @@ export default defineConfig(({ mode }) => {
       {
         name: 'replace-base-url',
         transformIndexHtml: {
-          enforce: 'pre',
-          transform(html) {
+          order: 'pre',
+          handler(html) {
             return html.replace(/__BASE_URL__/g, baseUrl)
           }
         }
       }
     ],
+    resolve: {
+      extensions: ['.js', '.jsx', '.json']
+    },
     server: {
       port: 5173,
       proxy: {
