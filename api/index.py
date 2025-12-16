@@ -8,13 +8,17 @@ parent_dir = str(Path(__file__).parent.parent)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-# Import app after path is set up
-from web.api import app
+# Lazy initialization to avoid issues with Vercel handler detection
+_handler = None
 
-# Import Mangum after app is imported  
-from mangum import Mangum
+def get_handler():
+    global _handler
+    if _handler is None:
+        from web.api import app
+        from mangum import Mangum
+        _handler = Mangum(app, lifespan="off")
+    return _handler
 
-# Create Mangum handler for Vercel
-# Note: WebSockets are not supported in Vercel serverless functions
-handler = Mangum(app, lifespan="off")
+# Export handler for Vercel
+handler = get_handler()
 
