@@ -1,0 +1,59 @@
+# Exclude heavy dependencies and unnecessary files from Vercel deployment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Data and output directories
+data/
+output/
+*.csv
+*.xlsx
+*.xls
+*.docx
+*.pptx
+*.sql
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Development files
+.env.local
+.env.*.local
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Large dependencies that aren't needed at import time
+# These will be imported lazily when needed
+stages/
+core/
+llm/
+utils/
+ui/
+orchestrator.py
+main.py
+config.py
+

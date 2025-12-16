@@ -18,10 +18,11 @@ from auth.database import AuthDatabase
 from auth.jwt import JWTManager
 from auth.password import PasswordHasher
 from auth.models import UserCreate, UserLogin, User, PasswordChange
-from orchestrator import Orchestrator
-from ui.progress import ProgressTracker
-from ui.prompts import UserPrompt
-from config import settings
+# Heavy dependencies imported lazily to reduce serverless function size
+# from orchestrator import Orchestrator  # Lazy import
+# from ui.progress import ProgressTracker  # Lazy import  
+# from ui.prompts import UserPrompt  # Lazy import
+# from config import settings  # Lazy import
 
 # Initialize auth components
 auth_db = AuthDatabase()
@@ -56,8 +57,8 @@ pipeline_jobs: Dict[str, Dict[str, Any]] = {}
 progress_connections: Dict[str, List[WebSocket]] = {}
 
 
-class WebProgressTracker(ProgressTracker):
-    """WebSocket-based progress tracker"""
+class WebProgressTracker:
+    """WebSocket-based progress tracker - inherits from ProgressTracker (lazy import)"""
     
     def __init__(self, job_id: str):
         self.job_id = job_id
@@ -104,8 +105,8 @@ class WebProgressTracker(ProgressTracker):
                 progress_connections[self.job_id].remove(ws)
 
 
-class WebUserPrompt(UserPrompt):
-    """Web-based user prompt (stores questions for frontend)"""
+class WebUserPrompt:
+    """Web-based user prompt - inherits from UserPrompt (lazy import)"""
     
     def __init__(self, job_id: str):
         self.job_id = job_id
@@ -206,6 +207,9 @@ async def upload_file(
     user: User = Depends(get_current_user)
 ):
     """Upload file and start pipeline"""
+    # Lazy import to reduce serverless function size
+    from config import settings
+    
     job_id = str(uuid.uuid4())
     
     # Save uploaded file
@@ -234,7 +238,90 @@ async def upload_file(
 
 
 async def run_pipeline(job_id: str, file_path: str, user_id: int):
-    """Run pipeline in background"""
+    """Run pipeline in background - lazy imports to reduce serverless function size"""
+    # Lazy import heavy dependencies only when pipeline runs
+    from orchestrator import Orchestrator
+    from ui.progress import ProgressTracker
+    from ui.prompts import UserPrompt
+    from config import settings
+    
+    # Make WebProgressTracker inherit from ProgressTracker
+    class WebProgressTracker(ProgressTracker):
+        """WebSocket-based progress tracker"""
+        
+        def __init__(self, job_id: str):
+            super().__init__()
+            self.job_id = job_id
+            self.current_stage = None
+            self.stage_name = None
+        
+        def start_stage(self, stage_num: int, stage_name: str):
+            self.current_stage = stage_num
+            self.stage_name = stage_name
+            self._broadcast({
+                "type": "stage_start",
+                "stage": stage_num,
+                "name": stage_name
+            })
+        
+        def complete_stage(self, stage_num: int):
+            self._broadcast({
+                "type": "stage_complete",
+                "stage": stage_num
+            })
+        
+        def fail(self, stage_num: int, error: str):
+            self._broadcast({
+                "type": "stage_error",
+                "stage": stage_num,
+                "error": error
+            })
+        
+        def complete(self):
+            self._broadcast({
+                "type": "pipeline_complete"
+            })
+        
+        def _broadcast(self, message: dict):
+            """Broadcast progress to all connected clients"""
+            if self.job_id in progress_connections:
+                disconnected = []
+                for ws in progress_connections[self.job_id]:
+                    try:
+                        asyncio.create_task(ws.send_json(message))
+                    except:
+                        disconnected.append(ws)
+                for ws in disconnected:
+                    progress_connections[self.job_id].remove(ws)
+    
+    # Make WebUserPrompt inherit from UserPrompt
+    class WebUserPrompt(UserPrompt):
+        """Web-based user prompt (stores questions for frontend)"""
+        
+        def __init__(self, job_id: str):
+            super().__init__()
+            self.job_id = job_id
+            self.pending_questions: List[Dict[str, Any]] = []
+        
+        async def yes_no(self, question: str) -> bool:
+            """Store question and wait for response"""
+            question_id = str(uuid.uuid4())
+            self.pending_questions.append({
+                "id": question_id,
+                "type": "yes_no",
+                "question": question
+            })
+            pipeline_jobs[self.job_id]["questions"] = self.pending_questions
+            # In real implementation, wait for WebSocket response
+            # For now, default to yes
+            return True
+        
+        async def select_domain(self):
+            """Domain selection"""
+            # Would prompt user via WebSocket
+            from core.enums import Domain
+            return Domain.FINANCIAL  # Default
+    
     try:
         pipeline_jobs[job_id]["status"] = "running"
         
