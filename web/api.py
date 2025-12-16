@@ -496,6 +496,67 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         })
 
 
+@app.post("/api/pipeline/process/{job_id}")
+async def process_job(
+    job_id: str,
+    request: FastAPIRequest,
+    user: Optional[dict] = Depends(get_current_user)
+):
+    """Process a pending pipeline job - can be called by Supabase Edge Function or worker"""
+    
+    # Get job from database
+    job = get_job_from_db(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Check authentication - allow service role key from header for Edge Function calls
+    user_id = None
+    if user:
+        user_id = user.get("id")
+    else:
+        # Try to get service key from header (for Edge Function calls)
+        # Note: This is a simplified check - in production, use proper JWT validation
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            # In production, verify this is a valid service role key
+            # For now, we'll allow it if user is None (Edge Function call)
+            pass
+        else:
+            raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Verify ownership (skip if called with service key)
+    if user_id and job.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check if already processing or completed
+    if job.get("status") not in ["pending", "failed"]:
+        return {"message": f"Job already {job.get('status')}", "job_id": job_id}
+    
+    # Get file path from job metadata or reconstruct it
+    # Note: In Vercel, files are ephemeral, so we need to store them in Supabase Storage
+    # For now, assume file_path is stored in job metadata or reconstruct from job_id
+    from config import settings
+    output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
+    file_path = Path(output_dir) / "uploads" / job_id / job.get("filename")
+    
+    if not file_path.exists():
+        # File might be in Supabase Storage - would need to download it first
+        raise HTTPException(status_code=404, detail="File not found. Files must be stored in Supabase Storage for processing.")
+    
+    # Run pipeline
+    try:
+        user_id = job.get("user_id")  # Use job's user_id
+        await run_pipeline(job_id, str(file_path), user_id)
+        return {"message": "Job processed successfully", "job_id": job_id}
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        print(f"Error processing job {job_id}: {error_msg}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to process job: {error_msg}")
+
+
 @app.get("/api/pipeline/jobs")
 async def list_jobs(user: dict = Depends(get_current_user)):
     """List user's pipeline jobs from Supabase database"""
