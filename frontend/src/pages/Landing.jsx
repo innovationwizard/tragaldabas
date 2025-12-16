@@ -15,14 +15,13 @@ const Landing = () => {
           </h1>
           <p className="text-xl text-brand-muted mb-2">Universal Data Ingestor</p>
           <p className="text-lg text-brand-text max-w-2xl mx-auto mb-12">
-            AI-powered universal data ingestor that transforms raw, unstructured client files 
-            into actionable business intelligence.
+            Transform raw files into actionable business intelligence.
           </p>
 
           <div className="flex justify-center space-x-4 mb-20">
-            <Link to="/register" className="btn-primary">
+            {/* <Link to="/register" className="btn-primary">
               Get Started
-            </Link>
+            </Link> */}
             <Link to="/login" className="btn-secondary">
               Sign In
             </Link>
