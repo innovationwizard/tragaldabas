@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/AuthContextSupabase'
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth()
@@ -30,7 +30,7 @@ const Layout = ({ children }) => {
                   Upload
                 </Link>
                 <div className="flex items-center space-x-3">
-                  <span className="text-brand-muted text-sm">{user.email}</span>
+                  <span className="text-brand-muted text-sm">{user.email || user.user_metadata?.email}</span>
                   <button
                     onClick={handleLogout}
                     className="btn-secondary text-sm"

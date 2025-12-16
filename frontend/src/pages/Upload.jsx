@@ -52,7 +52,7 @@ const Upload = () => {
 
       navigate(`/pipeline/${response.data.job_id}`)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Upload failed')
+      setError(err.message || err.response?.data?.detail || 'Upload failed')
     } finally {
       setUploading(false)
     }

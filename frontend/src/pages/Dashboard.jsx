@@ -13,7 +13,18 @@ const Dashboard = () => {
 
   const fetchJobs = async () => {
     try {
-      const response = await axios.get('/api/pipeline/jobs')
+      // Get auth token from Supabase
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setLoading(false)
+        return
+      }
+      
+      const response = await axios.get('/api/pipeline/jobs', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
       setJobs(response.data.jobs || [])
     } catch (error) {
       console.error('Failed to fetch jobs:', error)

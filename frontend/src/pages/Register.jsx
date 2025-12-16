@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/AuthContextSupabase'
 import Layout from '../components/Layout'
 
 const Register = () => {
@@ -28,10 +28,13 @@ const Register = () => {
     setLoading(true)
 
     try {
-      await register(formData)
+      await register(formData.email, formData.password, {
+        username: formData.username,
+        full_name: formData.full_name
+      })
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed')
+      setError(err.message || err.response?.data?.detail || 'Registration failed')
     } finally {
       setLoading(false)
     }

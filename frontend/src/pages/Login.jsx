@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/AuthContextSupabase'
 import Layout from '../components/Layout'
 
 const Login = () => {
@@ -20,7 +20,7 @@ const Login = () => {
       await login(email, password)
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed')
+      setError(err.message || err.response?.data?.detail || 'Login failed')
     } finally {
       setLoading(false)
     }

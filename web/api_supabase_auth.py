@@ -1,11 +1,11 @@
-"""FastAPI application with Supabase Auth"""
+"""FastAPI application with Supabase Auth integration"""
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import asyncio
 import uuid
@@ -20,22 +20,18 @@ except ImportError:
     SUPABASE_AVAILABLE = False
     Client = None
 
-# Heavy dependencies imported lazily to reduce serverless function size
-# from orchestrator import Orchestrator  # Lazy import
-# from ui.progress import ProgressTracker  # Lazy import  
-# from ui.prompts import UserPrompt  # Lazy import
+from orchestrator import Orchestrator
+from ui.progress import ProgressTracker
+from ui.prompts import UserPrompt
 from config import settings
 
 # Initialize Supabase client
 supabase: Optional[Client] = None
 if SUPABASE_AVAILABLE and settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
-    try:
-        supabase = create_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_ROLE_KEY
-        )
-    except Exception as e:
-        print(f"Warning: Failed to initialize Supabase client: {e}")
+    supabase = create_client(
+        settings.SUPABASE_URL,
+        settings.SUPABASE_SERVICE_ROLE_KEY
+    )
 
 security = HTTPBearer()
 
@@ -46,7 +42,6 @@ app = FastAPI(
 )
 
 # CORS middleware
-# Allow origins from environment or default to localhost for development
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -66,21 +61,8 @@ pipeline_jobs: Dict[str, Dict[str, Any]] = {}
 progress_connections: Dict[str, List[WebSocket]] = {}
 
 
-# Pydantic models for request validation
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str
-    username: Optional[str] = None
-    full_name: Optional[str] = None
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class WebProgressTracker:
-    """WebSocket-based progress tracker - inherits from ProgressTracker (lazy import)"""
+class WebProgressTracker(ProgressTracker):
+    """WebSocket-based progress tracker"""
     
     def __init__(self, job_id: str):
         self.job_id = job_id
@@ -127,15 +109,14 @@ class WebProgressTracker:
                 progress_connections[self.job_id].remove(ws)
 
 
-class WebUserPrompt:
-    """Web-based user prompt - inherits from UserPrompt (lazy import)"""
+class WebUserPrompt(UserPrompt):
+    """Web-based user prompt"""
     
     def __init__(self, job_id: str):
         self.job_id = job_id
         self.pending_questions: List[Dict[str, Any]] = []
     
     async def yes_no(self, question: str) -> bool:
-        """Store question and wait for response"""
         question_id = str(uuid.uuid4())
         self.pending_questions.append({
             "id": question_id,
@@ -143,15 +124,11 @@ class WebUserPrompt:
             "question": question
         })
         pipeline_jobs[self.job_id]["questions"] = self.pending_questions
-        # In real implementation, wait for WebSocket response
-        # For now, default to yes
         return True
     
     async def select_domain(self):
-        """Domain selection"""
-        # Would prompt user via WebSocket
         from core.enums import Domain
-        return Domain.FINANCIAL  # Default
+        return Domain.FINANCIAL
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
@@ -174,22 +151,28 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
 
-# Auth endpoints (Supabase Auth)
+# Auth endpoints (using Supabase Auth)
 @app.post("/api/auth/register")
-async def register(user_data: RegisterRequest):
+async def register(user_data: dict):
     """Register new user via Supabase Auth"""
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase Auth not configured")
     
     try:
+        email = user_data.get("email")
+        password = user_data.get("password")
+        
+        if not email or not password:
+            raise HTTPException(status_code=400, detail="Email and password required")
+        
         # Register with Supabase Auth
         response = supabase.auth.sign_up({
-            "email": user_data.email,
-            "password": user_data.password,
+            "email": email,
+            "password": password,
             "options": {
                 "data": {
-                    "username": user_data.username,
-                    "full_name": user_data.full_name
+                    "username": user_data.get("username"),
+                    "full_name": user_data.get("full_name")
                 }
             }
         })
@@ -200,8 +183,7 @@ async def register(user_data: RegisterRequest):
                 "user": {
                     "id": response.user.id,
                     "email": response.user.email,
-                    "email_confirmed": response.user.email_confirmed_at is not None,
-                    "user_metadata": response.user.user_metadata
+                    "email_confirmed": response.user.email_confirmed_at is not None
                 }
             }
         else:
@@ -212,16 +194,19 @@ async def register(user_data: RegisterRequest):
 
 
 @app.post("/api/auth/login")
-async def login(login_data: LoginRequest):
+async def login(login_data: dict):
     """Login user via Supabase Auth"""
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase Auth not configured")
     
     try:
+        email = login_data.get("email")
+        password = login_data.get("password")
+        
         # Login with Supabase Auth
         response = supabase.auth.sign_in_with_password({
-            "email": login_data.email,
-            "password": login_data.password
+            "email": email,
+            "password": password
         })
         
         if response.user and response.session:
@@ -231,7 +216,7 @@ async def login(login_data: LoginRequest):
                 "user": {
                     "id": response.user.id,
                     "email": response.user.email,
-                    "user_metadata": response.user.user_metadata or {}
+                    "user_metadata": response.user.user_metadata
                 }
             }
         else:
@@ -247,6 +232,7 @@ async def logout(user: dict = Depends(get_current_user), credentials: HTTPAuthor
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase Auth not configured")
     
+    token = credentials.credentials
     try:
         supabase.auth.sign_out()
         return {"message": "Logged out successfully"}
@@ -265,17 +251,17 @@ async def get_current_user_info(user: dict = Depends(get_current_user)):
     }
 
 
-# Pipeline endpoints
+# Pipeline endpoints (same as before, but using Supabase Auth user)
 @app.post("/api/pipeline/upload")
 async def upload_file(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user)
 ):
     """Upload file and start pipeline"""
-    # Lazy import to reduce serverless function size
     from config import settings
     
     job_id = str(uuid.uuid4())
+    user_id = user.get("id")
     
     # Save uploaded file
     upload_dir = Path(settings.OUTPUT_DIR) / "uploads" / job_id
@@ -287,7 +273,6 @@ async def upload_file(
         f.write(content)
     
     # Initialize job
-    user_id = user.get("id")
     pipeline_jobs[job_id] = {
         "id": job_id,
         "user_id": user_id,
@@ -305,16 +290,12 @@ async def upload_file(
 
 async def run_pipeline(job_id: str, file_path: str, user_id: str):
     """Run pipeline in background - lazy imports to reduce serverless function size"""
-    # Lazy import heavy dependencies only when pipeline runs
     from orchestrator import Orchestrator
     from ui.progress import ProgressTracker
     from ui.prompts import UserPrompt
     from config import settings
     
-    # Make WebProgressTracker inherit from ProgressTracker
     class WebProgressTracker(ProgressTracker):
-        """WebSocket-based progress tracker"""
-        
         def __init__(self, job_id: str):
             super().__init__()
             self.job_id = job_id
@@ -349,7 +330,6 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             })
         
         def _broadcast(self, message: dict):
-            """Broadcast progress to all connected clients"""
             if self.job_id in progress_connections:
                 disconnected = []
                 for ws in progress_connections[self.job_id]:
@@ -360,17 +340,13 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 for ws in disconnected:
                     progress_connections[self.job_id].remove(ws)
     
-    # Make WebUserPrompt inherit from UserPrompt
     class WebUserPrompt(UserPrompt):
-        """Web-based user prompt (stores questions for frontend)"""
-        
         def __init__(self, job_id: str):
             super().__init__()
             self.job_id = job_id
             self.pending_questions: List[Dict[str, Any]] = []
         
         async def yes_no(self, question: str) -> bool:
-            """Store question and wait for response"""
             question_id = str(uuid.uuid4())
             self.pending_questions.append({
                 "id": question_id,
@@ -378,15 +354,11 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 "question": question
             })
             pipeline_jobs[self.job_id]["questions"] = self.pending_questions
-            # In real implementation, wait for WebSocket response
-            # For now, default to yes
             return True
         
         async def select_domain(self):
-            """Domain selection"""
-            # Would prompt user via WebSocket
             from core.enums import Domain
-            return Domain.FINANCIAL  # Default
+            return Domain.FINANCIAL
     
     try:
         pipeline_jobs[job_id]["status"] = "running"
@@ -403,7 +375,6 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         ctx = await orchestrator.run(file_path)
         
         pipeline_jobs[job_id]["status"] = "completed"
-        # Convert Pydantic models to dict (works for both v1 and v2)
         def to_dict(model):
             if model is None:
                 return None
@@ -468,8 +439,6 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
     if job.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Return file based on file_type (pptx, txt, sql, etc.)
-    # Implementation depends on output structure
     return {"message": "Download endpoint - implement based on output structure"}
 
 
@@ -484,14 +453,12 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
     progress_connections[job_id].append(websocket)
     
     try:
-        # Send current status if job exists
         if job_id in pipeline_jobs:
             await websocket.send_json({
                 "type": "status",
                 "data": pipeline_jobs[job_id]
             })
         
-        # Keep connection alive
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
