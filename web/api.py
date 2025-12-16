@@ -212,75 +212,51 @@ async def login(login_data: LoginRequest):
     
     try:
         # Look up user by username in user_metadata
-        # Query auth.users table via PostgREST to find user by username in metadata
+        # Query auth.users table directly via PostgREST (requires service role)
         user_email = None
         
         try:
-            # Use admin API to list users and find by username
-            # Note: This requires service role key and may be paginated
-            users_response = supabase.auth.admin.list_users()
+            # Query auth.users table using PostgREST
+            # Note: This requires service_role key to access auth schema
+            response = supabase.table('auth.users').select('email,raw_user_meta_data').execute()
             
-            # Handle different response structures
-            users = []
-            if hasattr(users_response, 'users'):
-                users = users_response.users
-            elif isinstance(users_response, dict) and 'users' in users_response:
-                users = users_response['users']
-            elif isinstance(users_response, list):
-                users = users_response
-            
-            for user in users:
-                # Handle different user object structures
-                metadata = None
-                email = None
-                
-                if hasattr(user, 'user_metadata'):
-                    metadata = user.user_metadata
-                    email = user.email if hasattr(user, 'email') else None
-                elif isinstance(user, dict):
-                    metadata = user.get('user_metadata') or user.get('raw_user_meta_data')
-                    email = user.get('email')
-                else:
-                    continue
-                
-                if metadata and metadata.get("username") == login_data.username:
-                    user_email = email
-                    break
-                    
+            if response.data:
+                for user in response.data:
+                    metadata = user.get('raw_user_meta_data') or {}
+                    if metadata.get("username") == login_data.username:
+                        user_email = user.get('email')
+                        break
         except Exception as lookup_error:
-            # If admin API fails, try alternative: query via database
-            # This requires DATABASE_URL to be set
-            import os
-            database_url = os.getenv("DATABASE_URL")
-            if database_url:
-                try:
-                    import asyncpg
-                    import asyncio
+            # Fallback: Try admin API
+            try:
+                users_response = supabase.auth.admin.list_users()
+                
+                # Handle response - could be object with .users or dict
+                users = []
+                if hasattr(users_response, 'users'):
+                    users = users_response.users
+                elif isinstance(users_response, dict):
+                    users = users_response.get('users', [])
+                
+                for user in users:
+                    # Handle both object and dict formats
+                    if hasattr(user, 'user_metadata'):
+                        metadata = user.user_metadata
+                        email = getattr(user, 'email', None)
+                    elif isinstance(user, dict):
+                        metadata = user.get('user_metadata') or user.get('raw_user_meta_data', {})
+                        email = user.get('email')
+                    else:
+                        continue
                     
-                    # Parse database URL and connect
-                    # Extract connection details from DATABASE_URL
-                    conn = await asyncpg.connect(database_url)
-                    result = await conn.fetchrow(
-                        """
-                        SELECT email, raw_user_meta_data 
-                        FROM auth.users 
-                        WHERE raw_user_meta_data->>'username' = $1
-                        LIMIT 1
-                        """,
-                        login_data.username
-                    )
-                    await conn.close()
-                    
-                    if result:
-                        user_email = result['email']
-                except Exception:
-                    # Database query failed, continue with error
-                    pass
-            
-            if not user_email:
-                # Log the error for debugging but don't expose it
-                print(f"Error looking up user: {lookup_error}")
-                raise HTTPException(status_code=401, detail="Invalid username or password")
+                    if metadata and metadata.get("username") == login_data.username:
+                        user_email = email
+                        break
+            except Exception as admin_error:
+                # Log errors for debugging
+                print(f"PostgREST lookup error: {lookup_error}")
+                print(f"Admin API lookup error: {admin_error}")
+                raise HTTPException(status_code=500, detail="Unable to lookup user")
         
         if not user_email:
             raise HTTPException(status_code=401, detail="Invalid username or password")
