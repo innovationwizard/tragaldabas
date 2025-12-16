@@ -1,79 +1,69 @@
 -- Row Level Security (RLS) Setup for Supabase Auth
--- This is MUCH simpler than custom JWT!
+-- This script sets up RLS for application tables used with Supabase Auth
 
 -- ============================================================================
--- 1. Enable RLS on tables
+-- 1. Create pipeline_jobs table (if it doesn't exist)
 -- ============================================================================
 
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS pipeline_jobs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,  -- Supabase Auth UUID (text format)
+    filename TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    questions JSONB,
+    result JSONB,
+    error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_user_id ON pipeline_jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_status ON pipeline_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_created_at ON pipeline_jobs(created_at);
 
 -- ============================================================================
--- 2. Users Table Policies (using Supabase Auth)
+-- 2. Enable RLS on pipeline_jobs
 -- ============================================================================
 
--- Users can view their own data
-CREATE POLICY "Users can view own data"
-ON users FOR SELECT
-USING (auth.uid() = id);
-
--- Users can update their own data
-CREATE POLICY "Users can update own data"
-ON users FOR UPDATE
-USING (auth.uid() = id)
-WITH CHECK (auth.uid() = id);
-
--- Allow public registration (INSERT)
-CREATE POLICY "Allow public registration"
-ON users FOR INSERT
-WITH CHECK (true);
+ALTER TABLE pipeline_jobs ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
--- 3. Sessions Table Policies
+-- 3. Pipeline Jobs Policies (using Supabase Auth)
 -- ============================================================================
 
--- Users can view their own sessions
-CREATE POLICY "Users can view own sessions"
-ON sessions FOR SELECT
-USING (auth.uid() = user_id);
+-- Users can view their own pipeline jobs
+CREATE POLICY "Users can view own pipeline jobs"
+ON pipeline_jobs FOR SELECT
+USING (auth.uid()::text = user_id);
 
--- Users can delete their own sessions
-CREATE POLICY "Users can delete own sessions"
-ON sessions FOR DELETE
-USING (auth.uid() = user_id);
+-- Users can create pipeline jobs for themselves
+CREATE POLICY "Users can insert own pipeline jobs"
+ON pipeline_jobs FOR INSERT
+WITH CHECK (auth.uid()::text = user_id);
 
--- Allow session creation
-CREATE POLICY "Allow session creation"
-ON sessions FOR INSERT
-WITH CHECK (auth.uid() = user_id);
+-- Users can update their own pipeline jobs
+CREATE POLICY "Users can update own pipeline jobs"
+ON pipeline_jobs FOR UPDATE
+USING (auth.uid()::text = user_id)
+WITH CHECK (auth.uid()::text = user_id);
 
--- ============================================================================
--- 4. Password Reset Tokens (service role only)
--- ============================================================================
-
--- Only service role can access reset tokens
-CREATE POLICY "Service role only for reset tokens"
-ON password_reset_tokens FOR ALL
-USING (auth.role() = 'service_role')
-WITH CHECK (auth.role() = 'service_role');
+-- Users can delete their own pipeline jobs
+CREATE POLICY "Users can delete own pipeline jobs"
+ON pipeline_jobs FOR DELETE
+USING (auth.uid()::text = user_id);
 
 -- ============================================================================
--- 5. Grant permissions
+-- 4. Grant permissions
 -- ============================================================================
 
-GRANT USAGE ON SEQUENCE users_id_seq TO authenticated;
-GRANT USAGE ON SEQUENCE sessions_id_seq TO authenticated;
-GRANT USAGE ON SEQUENCE password_reset_tokens_id_seq TO authenticated;
-
-GRANT SELECT, INSERT, UPDATE ON users TO authenticated;
-GRANT SELECT, INSERT, DELETE ON sessions TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON password_reset_tokens TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON pipeline_jobs TO authenticated;
 
 -- ============================================================================
--- Note: With Supabase Auth, you can also use:
+-- Note: With Supabase Auth, you can use:
+-- - auth.uid() - Get current user's UUID
 -- - auth.email() - Get user's email
 -- - auth.jwt() - Get full JWT claims
--- - auth.role() - Get user role
+-- - auth.role() - Get user role ('authenticated', 'anon', 'service_role')
+--
+-- The ::text cast is needed because Supabase Auth UUIDs are stored as text
 -- ============================================================================
-
