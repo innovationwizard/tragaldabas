@@ -43,6 +43,8 @@ security = HTTPBearer(auto_error=False)
 
 def verify_railway_api_key(authorization: Optional[str] = Header(None)):
     """Verify Railway API key from Authorization header"""
+    print(f"AUTH: {authorization}", flush=True)
+    
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header required")
     
@@ -80,7 +82,6 @@ async def worker_process(
     Process pipeline job - called by Supabase Edge Function
     This worker has access to all pipeline dependencies
     """
-    print(f"AUTH: {request.headers.get('Authorization')}", flush=True)
     print(f"✅ Authentication successful for job {job_id}", flush=True)
     
     # Call the process_job function from web.api
