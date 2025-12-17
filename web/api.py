@@ -628,11 +628,27 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 result = {}
                 for key, value in model.items():
                     if isinstance(value, pd.DataFrame):
+                        # Convert DataFrame sample to dict, handling NaN values
+                        sample_data = []
+                        if len(value) > 0:
+                            sample_df = value.head(10)
+                            sample_dicts = sample_df.to_dict(orient='records')
+                            for row in sample_dicts:
+                                cleaned_row = {}
+                                for k, v in row.items():
+                                    if pd.isna(v) or (isinstance(v, float) and math.isnan(v)):
+                                        cleaned_row[k] = None
+                                    elif isinstance(v, float) and math.isinf(v):
+                                        cleaned_row[k] = "infinity" if v > 0 else "-infinity"
+                                    else:
+                                        cleaned_row[k] = to_dict(v)
+                                sample_data.append(cleaned_row)
+                        
                         result[key] = {
                             "_type": "DataFrame",
                             "shape": value.shape,
                             "columns": value.columns.tolist(),
-                            "sample": value.head(10).to_dict(orient='records') if len(value) > 0 else []
+                            "sample": sample_data
                         }
                     elif isinstance(value, (datetime, date)):
                         result[key] = value.isoformat()
