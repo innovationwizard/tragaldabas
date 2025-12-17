@@ -315,26 +315,38 @@ async def upload_file(
     import tempfile
     
     job_id = str(uuid.uuid4())
+    user_id = user.get("id")
     
-    # Save uploaded file - use /tmp for Vercel serverless compatibility
-    # Vercel provides /tmp directory that persists during function execution
-    output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
-    upload_dir = Path(output_dir) / "uploads" / job_id
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / file.filename
+    # Upload file to Supabase Storage (persistent, accessible from Railway worker)
+    # Files in Vercel /tmp are ephemeral and not accessible from Railway
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
     
     try:
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        # Read file content
+        content = await file.read()
+        
+        # Upload to Supabase Storage bucket "uploads"
+        storage_path = f"{user_id}/{job_id}/{file.filename}"
+        response = supabase.storage.from_("uploads").upload(
+            path=storage_path,
+            file=content,
+            file_options={"content-type": file.content_type or "application/octet-stream", "upsert": "true"}
+        )
+        
+        # Check for upload errors
+        if hasattr(response, 'error') and response.error:
+            raise Exception(f"Supabase Storage upload error: {response.error}")
+        
+        print(f"✅ File uploaded to Supabase Storage: {storage_path}", flush=True)
+        
     except Exception as e:
         import traceback
-        print(f"Error saving file: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        print(f"❌ Error uploading file to Supabase Storage: {e}", flush=True)
+        print(traceback.format_exc(), flush=True)
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
     
     # Initialize job in Supabase database
-    user_id = user.get("id")
     job_data = {
         "id": job_id,
         "user_id": user_id,
@@ -343,7 +355,8 @@ async def upload_file(
         "current_stage": None,
         "current_stage_name": None,
         "completed_stages": [],
-        "questions": []
+        "questions": [],
+        "storage_path": storage_path  # Store the storage path for later retrieval
     }
     
     # Create job in database (synchronous call)
@@ -560,16 +573,52 @@ async def process_job(
     if job.get("status") not in ["pending", "failed"]:
         return {"message": f"Job already {job.get('status')}", "job_id": job_id}
     
-    # Get file path from job metadata or reconstruct it
-    # Note: In Vercel, files are ephemeral, so we need to store them in Supabase Storage
-    # For now, assume file_path is stored in job metadata or reconstruct from job_id
-    # settings is already imported at module level
-    output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
-    file_path = Path(output_dir) / "uploads" / job_id / job.get("filename")
+    # Download file from Supabase Storage
+    # Files are stored in Supabase Storage, not in local filesystem
+    filename = job.get("filename")
+    storage_path = job.get("storage_path")
     
-    if not file_path.exists():
-        # File might be in Supabase Storage - would need to download it first
-        raise HTTPException(status_code=404, detail="File not found. Files must be stored in Supabase Storage for processing.")
+    if not filename:
+        raise HTTPException(status_code=400, detail="Job filename not found")
+    
+    if not storage_path:
+        # Fallback: reconstruct storage path from job data
+        user_id = job.get("user_id")
+        storage_path = f"{user_id}/{job_id}/{filename}"
+        print(f"⚠️ Storage path not in job data, reconstructing: {storage_path}", flush=True)
+    
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+    
+    try:
+        # Download file from Supabase Storage
+        print(f"📥 Downloading file from Supabase Storage: {storage_path}", flush=True)
+        file_data = supabase.storage.from_("uploads").download(storage_path)
+        
+        if not file_data:
+            raise Exception("File data is None")
+        
+        # Save to local filesystem for processing
+        output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
+        local_upload_dir = Path(output_dir) / "uploads" / job_id
+        local_upload_dir.mkdir(parents=True, exist_ok=True)
+        file_path = local_upload_dir / filename
+        
+        with open(file_path, "wb") as f:
+            f.write(file_data)
+        
+        print(f"✅ File downloaded and saved to: {file_path}", flush=True)
+        
+    except Exception as e:
+        import traceback
+        error_msg = f"Failed to download file from Supabase Storage: {str(e)}"
+        print(f"❌ {error_msg}", flush=True)
+        print(traceback.format_exc(), flush=True)
+        update_job_in_db(job_id, {
+            "status": "failed",
+            "error": error_msg
+        })
+        raise HTTPException(status_code=404, detail=error_msg)
     
     # Run pipeline
     # Note: Pipeline processing requires heavy dependencies (pandas, numpy, LLM libraries)

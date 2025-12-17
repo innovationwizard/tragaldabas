@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
     failed_stage INTEGER,
     questions JSONB,
     result JSONB,
-    error TEXT
+    error TEXT,
+    storage_path TEXT  -- Path in Supabase Storage (e.g., "user_id/job_id/filename")
 );
 
 CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_user_id ON pipeline_jobs(user_id);
