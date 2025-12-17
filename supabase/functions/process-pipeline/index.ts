@@ -77,9 +77,19 @@ serve(async (req) => {
       .eq('id', job_id)
 
     // Call processing endpoint - prefer worker if available, otherwise Vercel API
-    const processingUrl = WORKER_URL 
-      ? `${WORKER_URL}/process/${job_id}`
-      : `${VERCEL_API_URL}/api/pipeline/process/${job_id}`
+    // Ensure WORKER_URL has protocol and doesn't include path
+    let processingUrl
+    if (WORKER_URL) {
+      // Add https:// if missing, remove trailing slash, ensure no /process path
+      const baseUrl = WORKER_URL.startsWith('http') 
+        ? WORKER_URL.replace(/\/$/, '') 
+        : `https://${WORKER_URL.replace(/\/$/, '')}`
+      processingUrl = `${baseUrl}/process/${job_id}`
+    } else {
+      processingUrl = `${VERCEL_API_URL}/api/pipeline/process/${job_id}`
+    }
+    
+    console.log(`Calling processing endpoint: ${processingUrl}`)
     
     const vercelResponse = await fetch(processingUrl, {
       method: 'POST',
