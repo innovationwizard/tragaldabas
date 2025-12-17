@@ -581,6 +581,11 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             if model is None:
                 return None
             
+            # Handle datetime objects - convert to ISO format string
+            from datetime import datetime, date
+            if isinstance(model, (datetime, date)):
+                return model.isoformat()
+            
             # Handle DataFrames - convert to serializable format
             import pandas as pd
             if isinstance(model, pd.DataFrame):
@@ -592,7 +597,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                     "sample": model.head(10).to_dict(orient='records') if len(model) > 0 else []
                 }
             
-            # Handle dicts that might contain DataFrames
+            # Handle dicts that might contain DataFrames or datetimes
             if isinstance(model, dict):
                 result = {}
                 for key, value in model.items():
@@ -603,21 +608,23 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                             "columns": value.columns.tolist(),
                             "sample": value.head(10).to_dict(orient='records') if len(value) > 0 else []
                         }
+                    elif isinstance(value, (datetime, date)):
+                        result[key] = value.isoformat()
                     else:
                         result[key] = to_dict(value)
                 return result
             
-            # Handle lists that might contain DataFrames
+            # Handle lists that might contain DataFrames or datetimes
             if isinstance(model, list):
                 return [to_dict(item) for item in model]
             
             # Handle Pydantic models
             if hasattr(model, 'model_dump'):
                 dumped = model.model_dump()
-                return to_dict(dumped)  # Recursively handle nested DataFrames
+                return to_dict(dumped)  # Recursively handle nested DataFrames/datetimes
             elif hasattr(model, 'dict'):
                 dumped = model.dict()
-                return to_dict(dumped)  # Recursively handle nested DataFrames
+                return to_dict(dumped)  # Recursively handle nested DataFrames/datetimes
             
             return model
         
