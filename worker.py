@@ -92,7 +92,78 @@ def verify_railway_api_key(authorization: Optional[str] = Header(None)):
 @app.get("/health")
 async def health():
     """Health check endpoint"""
-    return {"status": "ok", "service": "pipeline-worker"}
+    health_info = {
+        "status": "ok",
+        "service": "pipeline-worker",
+        "config": {
+            "supabase_url_set": bool(os.getenv("SUPABASE_URL")),
+            "supabase_service_key_set": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
+            "railway_api_key_set": bool(os.getenv("RAILWAY_API_KEY")),
+        }
+    }
+    
+    # Test imports
+    try:
+        from config import settings
+        health_info["config"]["settings_loaded"] = True
+    except Exception as e:
+        health_info["config"]["settings_loaded"] = False
+        health_info["config"]["settings_error"] = str(e)
+    
+    try:
+        from web.api import get_job_from_db
+        health_info["imports"]["web_api"] = True
+    except Exception as e:
+        health_info["imports"] = {"web_api": False, "error": str(e)}
+    
+    return health_info
+
+
+@app.get("/test/{job_id}")
+async def test_job_access(job_id: str):
+    """Test endpoint to debug job access and file download"""
+    try:
+        print(f"🧪 Testing job access for {job_id}", flush=True)
+        
+        # Test get_job_from_db
+        job = get_job_from_db(job_id)
+        if not job:
+            return {"error": "Job not found", "job_id": job_id}
+        
+        print(f"✅ Job found: {job.get('filename')}, storage_path={job.get('storage_path')}", flush=True)
+        
+        # Test file download
+        storage_path = job.get("storage_path")
+        if not storage_path:
+            return {"error": "storage_path not set", "job": job}
+        
+        # Try to download file
+        from web.api import supabase
+        if not supabase:
+            return {"error": "Supabase client not initialized"}
+        
+        print(f"📥 Attempting to download: {storage_path}", flush=True)
+        file_data = supabase.storage.from_("uploads").download(storage_path)
+        
+        if file_data:
+            file_size = len(file_data) if isinstance(file_data, bytes) else "unknown"
+            return {
+                "success": True,
+                "job_id": job_id,
+                "filename": job.get("filename"),
+                "storage_path": storage_path,
+                "file_size": file_size,
+                "status": job.get("status")
+            }
+        else:
+            return {"error": "File data is None", "storage_path": storage_path}
+            
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 
 @app.post("/process/{job_id}")
@@ -117,7 +188,12 @@ async def worker_process(
     )
     
     try:
-        return await process_job(job_id, request, mock_credentials)
+        print(f"🚀 Starting pipeline processing for job {job_id}", flush=True)
+        # Lazy import process_job
+        process_job_func = get_process_job()
+        result = await process_job_func(job_id, request, mock_credentials)
+        print(f"✅ Pipeline completed successfully for job {job_id}", flush=True)
+        return result
     except Exception as e:
         import traceback
         error_msg = str(e)
