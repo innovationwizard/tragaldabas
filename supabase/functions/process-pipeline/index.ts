@@ -70,11 +70,9 @@ serve(async (req) => {
       )
     }
 
-    // Update job status to running
-    await supabase
-      .from('pipeline_jobs')
-      .update({ status: 'running', updated_at: new Date().toISOString() })
-      .eq('id', job_id)
+    // Don't set status to running here - let the worker claim the job and set it to running
+    // This prevents race conditions where Edge Function sets it to running but worker
+    // sees it as already running and skips processing
 
     // Call processing endpoint - prefer worker if available, otherwise Vercel API
     // Ensure WORKER_URL has protocol and doesn't include path

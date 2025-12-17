@@ -471,6 +471,7 @@ async def retry_job(
 
 async def run_pipeline(job_id: str, file_path: str, user_id: str):
     """Run pipeline in background - lazy imports to reduce serverless function size"""
+    print(f"🎯 run_pipeline() CALLED for job {job_id}, file: {file_path}", flush=True)
     # Lazy import heavy dependencies only when pipeline runs
     from orchestrator import Orchestrator
     from ui.progress import ProgressTracker
@@ -706,6 +707,7 @@ async def process_job(
     
     # Check if already processing or completed
     if job.get("status") not in ["pending", "failed"]:
+        print(f"⏭️ Skipping job {job_id}: status={job.get('status')}", flush=True)
         return {"message": f"Job already {job.get('status')}", "job_id": job_id}
     
     # Download file from Supabase Storage
@@ -790,7 +792,9 @@ async def process_job(
                        "See docs/DEPLOYMENT.md for options."
             )
         
+        print(f"📞 process_job() calling run_pipeline() for job {job_id}", flush=True)
         await run_pipeline(job_id, str(file_path), user_id)
+        print(f"✅ process_job() run_pipeline() returned for job {job_id}", flush=True)
         return {"message": "Job processed successfully", "job_id": job_id}
     except HTTPException:
         raise
