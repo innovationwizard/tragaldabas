@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 import os
 from datetime import datetime
+import logging
 
 try:
     from supabase import create_client, Client
@@ -190,10 +191,13 @@ class WebUserPrompt:
         return Domain.FINANCIAL  # Default
 
 
+logger = logging.getLogger(__name__)
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
 ) -> dict:
     """Get current user from Supabase Auth"""
+    logger.error(f"Credentials type: {type(credentials)}, value: {credentials}")
     if not credentials or not credentials.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
 
