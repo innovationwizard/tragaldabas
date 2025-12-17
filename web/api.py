@@ -314,7 +314,7 @@ async def login(login_data: LoginRequest):
 
 
 @app.post("/api/auth/logout")
-async def logout(user: dict = Depends(get_current_user), credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def logout(user: dict = Depends(get_current_user), credentials: HTTPAuthorizationCredentials = Depends(bearer)):
     """Logout user via Supabase Auth"""
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase Auth not configured")
@@ -843,7 +843,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
 async def process_job(
     job_id: str,
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer)
 ):
     """Process a pending pipeline job - can be called by Supabase Edge Function or worker"""
     
