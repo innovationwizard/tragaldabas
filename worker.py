@@ -80,6 +80,7 @@ async def worker_process(
     Process pipeline job - called by Supabase Edge Function
     This worker has access to all pipeline dependencies
     """
+    print(f"AUTH: {request.headers.get('Authorization')}", flush=True)
     print(f"✅ Authentication successful for job {job_id}", flush=True)
     
     # Call the process_job function from web.api
