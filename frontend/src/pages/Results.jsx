@@ -183,7 +183,9 @@ const Results = () => {
                 )}
                 <div className="space-y-4">
                   {result.analysis.insights && result.analysis.insights.length > 0 ? (
-                    result.analysis.insights.map((insight, idx) => {
+                    (() => {
+                      console.log('Insights data:', JSON.stringify(result.analysis.insights, null, 2))
+                      return result.analysis.insights.map((insight, idx) => {
                       // Handle both object and string formats
                       const headline = insight?.headline || insight?.title || `Insight ${idx + 1}`
                       const detail = insight?.detail || insight?.description || ''
