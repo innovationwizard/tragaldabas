@@ -57,26 +57,34 @@ async def worker_process(
     Process pipeline job - called by Supabase Edge Function or Vercel API
     This worker has access to all pipeline dependencies
     """
+    import sys
+    print(f"🔵 Worker received request for job {job_id}", flush=True)
+    print(f"🔵 Credentials present: {credentials is not None}", flush=True)
+    
     # Verify service role key or user token
     if not credentials:
-        print("❌ No credentials provided")
+        print("❌ No credentials provided", flush=True)
         raise HTTPException(status_code=401, detail="Authentication required")
     
     token = credentials.credentials
+    print(f"🔵 Token received, length: {len(token) if token else 0}", flush=True)
     
     # Check if SUPABASE_SERVICE_ROLE_KEY is set
     if not settings.SUPABASE_SERVICE_ROLE_KEY:
-        print("❌ SUPABASE_SERVICE_ROLE_KEY not configured in worker")
+        print("❌ SUPABASE_SERVICE_ROLE_KEY not configured in worker", flush=True)
         raise HTTPException(status_code=500, detail="Worker configuration error: SUPABASE_SERVICE_ROLE_KEY not set")
+    
+    print(f"🔵 Expected key length: {len(settings.SUPABASE_SERVICE_ROLE_KEY)}", flush=True)
     
     # Check if it's a service role key
     if token != settings.SUPABASE_SERVICE_ROLE_KEY:
-        print(f"❌ Token mismatch. Received token length: {len(token)}, Expected length: {len(settings.SUPABASE_SERVICE_ROLE_KEY)}")
-        print(f"Token starts with: {token[:10]}...")
-        print(f"Expected starts with: {settings.SUPABASE_SERVICE_ROLE_KEY[:10]}...")
+        print(f"❌ Token mismatch!", flush=True)
+        print(f"   Received token length: {len(token)}, Expected length: {len(settings.SUPABASE_SERVICE_ROLE_KEY)}", flush=True)
+        print(f"   Token starts with: {token[:20] if len(token) > 20 else token}...", flush=True)
+        print(f"   Expected starts with: {settings.SUPABASE_SERVICE_ROLE_KEY[:20] if len(settings.SUPABASE_SERVICE_ROLE_KEY) > 20 else settings.SUPABASE_SERVICE_ROLE_KEY}...", flush=True)
         raise HTTPException(status_code=401, detail="Invalid service key - token does not match SUPABASE_SERVICE_ROLE_KEY")
     
-    print(f"✅ Authentication successful for job {job_id}")
+    print(f"✅ Authentication successful for job {job_id}", flush=True)
     
     # Call the process_job function from web.api
     # This will have access to all dependencies
