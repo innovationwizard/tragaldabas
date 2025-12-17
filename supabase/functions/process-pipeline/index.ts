@@ -101,18 +101,24 @@ serve(async (req) => {
 
     if (!vercelResponse.ok) {
       const errorText = await vercelResponse.text()
+      console.error(`Worker returned error (${vercelResponse.status}):`, errorText)
+      
       // Update job status to failed
       await supabase
         .from('pipeline_jobs')
         .update({ 
           status: 'failed', 
-          error: errorText,
+          error: errorText.substring(0, 1000), // Limit error length
           updated_at: new Date().toISOString() 
         })
         .eq('id', job_id)
 
       return new Response(
-        JSON.stringify({ error: 'Failed to process job', details: errorText }),
+        JSON.stringify({ 
+          error: 'Failed to process job', 
+          details: errorText,
+          status_code: vercelResponse.status
+        }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       )
     }
