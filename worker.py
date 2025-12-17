@@ -18,14 +18,37 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Import web.api modules - handle import errors gracefully
+# Import config first (lightweight)
 try:
-    from web.api import process_job, get_job_from_db, update_job_in_db
     from config import settings
 except ImportError as e:
-    print(f"Warning: Could not import web.api: {e}")
-    print("Make sure all dependencies are installed from requirements-full.txt")
+    print(f"❌ Failed to import config: {e}", flush=True)
+    import traceback
+    print(traceback.format_exc(), flush=True)
     raise
+
+# Lazy import web.api modules (only when needed)
+# This prevents startup crashes if web.api has import issues
+def get_process_job():
+    """Lazy import process_job to avoid startup crashes"""
+    try:
+        from web.api import process_job
+        return process_job
+    except ImportError as e:
+        print(f"❌ Failed to import process_job: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        raise
+
+def get_job_from_db(job_id: str):
+    """Lazy import get_job_from_db"""
+    from web.api import get_job_from_db as _get_job_from_db
+    return _get_job_from_db(job_id)
+
+def update_job_in_db(job_id: str, updates: dict):
+    """Lazy import update_job_in_db"""
+    from web.api import update_job_in_db as _update_job_in_db
+    return _update_job_in_db(job_id, updates)
 
 app = FastAPI(title="Tragaldabas Pipeline Worker")
 
