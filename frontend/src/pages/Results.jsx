@@ -222,6 +222,7 @@ const Results = () => {
                         </div>
                       )
                     })
+                    })()
                   ) : (
                     <div className="card bg-brand-bg">
                       <p className="text-brand-muted">No insights available for this analysis.</p>
