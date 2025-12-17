@@ -517,17 +517,36 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         }
         
         # Update job with completed status and result (synchronous call)
-        update_job_in_db(job_id, {
-            "status": "completed",
-            "result": result
-        })
+        print(f"💾 Updating job {job_id} to completed status", flush=True)
+        try:
+            update_job_in_db(job_id, {
+                "status": "completed",
+                "result": result
+            })
+            print(f"✅ Job {job_id} status updated to completed", flush=True)
+        except Exception as update_error:
+            print(f"❌ Failed to update job status: {update_error}", flush=True)
+            import traceback
+            print(traceback.format_exc(), flush=True)
+            # Re-raise to ensure error is visible
+            raise
         
     except Exception as e:
         # Update job with failed status and error (synchronous call)
-        update_job_in_db(job_id, {
-            "status": "failed",
-            "error": str(e)
-        })
+        error_msg = str(e)
+        print(f"❌ Pipeline failed for job {job_id}: {error_msg}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        try:
+            update_job_in_db(job_id, {
+                "status": "failed",
+                "error": error_msg
+            })
+            print(f"✅ Job {job_id} status updated to failed", flush=True)
+        except Exception as update_error:
+            print(f"❌ Failed to update job status to failed: {update_error}", flush=True)
+            import traceback
+            print(traceback.format_exc(), flush=True)
 
 
 @app.post("/api/pipeline/process/{job_id}")
