@@ -61,11 +61,12 @@ class Reconciler(Stage[ArchaeologyResult, ReconciliationResult]):
                 mappings.append(mapping)
                 
                 if canonical not in [c.original_name for c in canonical_columns]:
+                    from core.enums import DataType, SemanticRole
                     canonical_columns.append(ColumnInference(
                         original_name=canonical,
                         canonical_name=canonical,
-                        data_type=None,  # Will be inferred later
-                        semantic_role=None
+                        data_type=DataType.STRING,  # Default, will be inferred later
+                        semantic_role=SemanticRole.UNKNOWN  # Default, will be inferred later
                     ))
         
         # Stack all dataframes
