@@ -1,6 +1,6 @@
 """FastAPI application with Supabase Auth"""
 
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -38,19 +38,7 @@ if SUPABASE_AVAILABLE and settings.SUPABASE_URL and settings.SUPABASE_SERVICE_RO
     except Exception as e:
         print(f"Warning: Failed to initialize Supabase client: {e}")
 
-security = HTTPBearer(auto_error=False)  # Don't auto-raise error, handle manually
-
-async def get_credentials_or_none(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
-) -> Optional[HTTPAuthorizationCredentials]:
-    """Dependency to get credentials or None"""
-    # Explicitly handle None case
-    if credentials is None:
-        return None
-    # Validate credentials object has required attribute
-    if not hasattr(credentials, 'credentials'):
-        return None
-    return credentials
+bearer = HTTPBearer(auto_error=False)
 
 app = FastAPI(
     title="Tragaldabas API",
@@ -202,7 +190,9 @@ class WebUserPrompt:
         return Domain.FINANCIAL  # Default
 
 
-async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(get_credentials_or_none)) -> dict:
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+) -> dict:
     """Get current user from Supabase Auth"""
     if not supabase:
         raise HTTPException(
@@ -210,11 +200,10 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             detail="Supabase Auth not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
         )
     
-    # Check for missing credentials - return proper 401
     if not credentials or not credentials.credentials:
         raise HTTPException(
-            status_code=401,
-            detail="Missing Authorization header"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization header",
         )
     
     token = credentials.credentials
