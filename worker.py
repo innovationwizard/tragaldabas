@@ -59,14 +59,24 @@ async def worker_process(
     """
     # Verify service role key or user token
     if not credentials:
+        print("❌ No credentials provided")
         raise HTTPException(status_code=401, detail="Authentication required")
     
     token = credentials.credentials
     
+    # Check if SUPABASE_SERVICE_ROLE_KEY is set
+    if not settings.SUPABASE_SERVICE_ROLE_KEY:
+        print("❌ SUPABASE_SERVICE_ROLE_KEY not configured in worker")
+        raise HTTPException(status_code=500, detail="Worker configuration error: SUPABASE_SERVICE_ROLE_KEY not set")
+    
     # Check if it's a service role key
     if token != settings.SUPABASE_SERVICE_ROLE_KEY:
-        # Could also verify user tokens here if needed
-        raise HTTPException(status_code=401, detail="Invalid service key")
+        print(f"❌ Token mismatch. Received token length: {len(token)}, Expected length: {len(settings.SUPABASE_SERVICE_ROLE_KEY)}")
+        print(f"Token starts with: {token[:10]}...")
+        print(f"Expected starts with: {settings.SUPABASE_SERVICE_ROLE_KEY[:10]}...")
+        raise HTTPException(status_code=401, detail="Invalid service key - token does not match SUPABASE_SERVICE_ROLE_KEY")
+    
+    print(f"✅ Authentication successful for job {job_id}")
     
     # Call the process_job function from web.api
     # This will have access to all dependencies
