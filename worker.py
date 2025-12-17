@@ -84,8 +84,15 @@ async def worker_process(
     
     # Call the process_job function from web.api
     # This will have access to all dependencies
+    # Create a mock credentials object for process_job (it needs the service role key)
+    from fastapi.security import HTTPAuthorizationCredentials
+    mock_credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer",
+        credentials=settings.SUPABASE_SERVICE_ROLE_KEY
+    )
+    
     try:
-        return await process_job(job_id, request, credentials)
+        return await process_job(job_id, request, mock_credentials)
     except Exception as e:
         import traceback
         error_msg = str(e)
