@@ -860,7 +860,7 @@ async def process_job(
     user_id = None
     is_service_call = False
     
-    if credentials:
+    if credentials and hasattr(credentials, 'credentials') and credentials.credentials:
         token = credentials.credentials
         # Try to verify as user token first
         try:
