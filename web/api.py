@@ -515,11 +515,19 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         
         async def complete(self):
             # Update job status in database
-            await update_job_in_db(self.job_id, {
-                "status": "completed",
-                "current_stage": 7,  # Output stage
-                "current_stage_name": "Output"
-            })
+            print(f"🔔 WebProgressTracker.complete() called for job {self.job_id}", flush=True)
+            try:
+                await update_job_in_db(self.job_id, {
+                    "status": "completed",
+                    "current_stage": 7,  # Output stage
+                    "current_stage_name": "Output"
+                })
+                print(f"✅ WebProgressTracker.complete() finished for job {self.job_id}", flush=True)
+            except Exception as e:
+                print(f"❌ WebProgressTracker.complete() failed for job {self.job_id}: {e}", flush=True)
+                import traceback
+                print(traceback.format_exc(), flush=True)
+                raise
     
     # Make WebUserPrompt inherit from UserPrompt
     class WebUserPrompt(UserPrompt):
@@ -563,7 +571,9 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             db_connection_string=settings.DATABASE_URL
         )
         
+        print(f"🚀 Calling orchestrator.run() for job {job_id}", flush=True)
         ctx = await orchestrator.run(file_path)
+        print(f"✅ orchestrator.run() completed for job {job_id}", flush=True)
         
         # Convert Pydantic models to dict (works for both v1 and v2)
         def to_dict(model):
@@ -587,11 +597,18 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         }
         
         # Update job with completed status and result
-        print(f"💾 Updating job {job_id} to completed status", flush=True)
-        await update_job_in_db(job_id, {
-            "status": "completed",
-            "result": result
-        })
+        print(f"💾 Updating job {job_id} to completed status with result", flush=True)
+        try:
+            await update_job_in_db(job_id, {
+                "status": "completed",
+                "result": result
+            })
+            print(f"✅ Successfully updated job {job_id} to completed", flush=True)
+        except Exception as update_error:
+            print(f"❌ CRITICAL: Failed to update job {job_id} to completed: {update_error}", flush=True)
+            import traceback
+            print(traceback.format_exc(), flush=True)
+            raise
         
         # Sanity check: verify the update actually persisted
         if supabase:
