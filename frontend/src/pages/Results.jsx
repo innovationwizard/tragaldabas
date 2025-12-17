@@ -9,6 +9,10 @@ const Results = () => {
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  
+  // Helper to safely render chip text (handles objects, strings, etc.)
+  const chipText = (v) =>
+    typeof v === 'string' ? v : (v?.name ?? v?.label ?? v?.headline ?? JSON.stringify(v))
 
   useEffect(() => {
     fetchJob()
@@ -152,7 +156,9 @@ const Results = () => {
                     <h3 className="font-semibold mb-2">Metrics Computed</h3>
                     <div className="flex flex-wrap gap-2">
                       {result.analysis.metrics_computed.map((metric, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-brand-bg rounded text-sm">{metric}</span>
+                        <span key={idx} className="px-2 py-1 bg-brand-bg rounded text-sm">
+                          {chipText(metric)}
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -162,7 +168,9 @@ const Results = () => {
                     <h3 className="font-semibold mb-2">Patterns Detected</h3>
                     <div className="flex flex-wrap gap-2">
                       {result.analysis.patterns_detected.map((pattern, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-brand-bg rounded text-sm">{pattern}</span>
+                        <span key={idx} className="px-2 py-1 bg-brand-bg rounded text-sm">
+                          {chipText(pattern)}
+                        </span>
                       ))}
                     </div>
                   </div>
