@@ -140,13 +140,60 @@ const Results = () => {
             {activeTab === 'analysis' && result.analysis && (
               <div>
                 <h2 className="text-2xl font-semibold mb-4">Analysis & Insights</h2>
-                <div className="space-y-4">
-                  {result.analysis.insights?.map((insight, idx) => (
-                    <div key={idx} className="card bg-brand-bg">
-                      <h3 className="font-semibold mb-2">{insight.title || `Insight ${idx + 1}`}</h3>
-                      <p className="text-brand-text">{insight.description || insight}</p>
+                {result.analysis.domain && (
+                  <div className="mb-4">
+                    <span className="text-brand-muted">Domain: </span>
+                    <span className="text-brand-text">{result.analysis.domain}</span>
+                  </div>
+                )}
+                {result.analysis.metrics_computed && result.analysis.metrics_computed.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold mb-2">Metrics Computed</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {result.analysis.metrics_computed.map((metric, idx) => (
+                        <span key={idx} className="px-2 py-1 bg-brand-bg rounded text-sm">{metric}</span>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                )}
+                <div className="space-y-4">
+                  {result.analysis.insights?.map((insight, idx) => {
+                    // Handle both object and string formats
+                    const headline = insight?.headline || insight?.title || `Insight ${idx + 1}`
+                    const detail = insight?.detail || insight?.description || ''
+                    const severity = insight?.severity || 'info'
+                    const implication = insight?.implication || ''
+                    const evidence = insight?.evidence || {}
+                    
+                    return (
+                      <div key={insight?.id || idx} className="card bg-brand-bg">
+                        <div className="flex items-start justify-between mb-2">
+                          <h3 className="font-semibold text-lg">{headline}</h3>
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            severity === 'critical' ? 'bg-red-100 text-red-800' :
+                            severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {severity}
+                          </span>
+                        </div>
+                        {detail && <p className="text-brand-text mb-2">{detail}</p>}
+                        {evidence && Object.keys(evidence).length > 0 && (
+                          <div className="mt-2 p-2 bg-brand-surface rounded text-sm">
+                            <p className="text-brand-muted text-xs mb-1">Evidence:</p>
+                            {evidence.metric && <p>Metric: {evidence.metric}</p>}
+                            {evidence.value !== undefined && <p>Value: {evidence.value}</p>}
+                            {evidence.comparison && <p>Comparison: {evidence.comparison}</p>}
+                            {evidence.delta !== undefined && <p>Delta: {evidence.delta}</p>}
+                            {evidence.delta_percent !== undefined && <p>Delta %: {evidence.delta_percent}%</p>}
+                          </div>
+                        )}
+                        {implication && (
+                          <p className="text-brand-text mt-2 italic">{implication}</p>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}

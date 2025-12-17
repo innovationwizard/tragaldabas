@@ -928,6 +928,9 @@ async def get_job(job_id: str, user: dict = Depends(get_current_user)):
 @app.get("/api/pipeline/jobs/{job_id}/download/{file_type}")
 async def download_output(job_id: str, file_type: str, user: dict = Depends(get_current_user)):
     """Download output files"""
+    from fastapi.responses import FileResponse
+    from pathlib import Path
+    
     user_id = user.get("id")
     
     job = get_job_from_db(job_id)  # Synchronous call
@@ -936,9 +939,60 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
     if job.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Return file based on file_type (pptx, txt, sql, etc.)
-    # Implementation depends on output structure
-    return {"message": "Download endpoint - implement based on output structure"}
+    if job.get("status") != "completed":
+        raise HTTPException(status_code=400, detail="Job not completed yet")
+    
+    result = job.get("result")
+    if not result:
+        raise HTTPException(status_code=404, detail="Job result not found")
+    
+    output = result.get("output")
+    if not output:
+        raise HTTPException(status_code=404, detail="Output not found")
+    
+    # Get file path based on file_type
+    file_path = None
+    content_type = None
+    filename = None
+    
+    if file_type == "txt":
+        file_path = output.get("text_file_path")
+        content_type = "text/plain"
+        filename = f"{job.get('filename', 'insights')}.txt"
+    elif file_type == "pptx":
+        file_path = output.get("pptx_file_path")
+        content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        filename = f"{job.get('filename', 'presentation')}.pptx"
+    elif file_type == "md":
+        file_path = output.get("markdown_file_path")
+        content_type = "text/markdown"
+        filename = f"{job.get('filename', 'insights')}.md"
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_type}")
+    
+    if not file_path:
+        raise HTTPException(status_code=404, detail=f"{file_type} file not generated")
+    
+    # Check if file exists
+    path = Path(file_path)
+    if not path.exists():
+        # Try relative to OUTPUT_DIR
+        from config import settings
+        output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
+        path = Path(output_dir) / path.name
+        if not path.exists():
+            # Try to find file in job-specific output directory
+            path = Path(output_dir) / "insights" / path.name
+            if not path.exists() and file_type == "pptx":
+                path = Path(output_dir) / "presentations" / path.name
+            if not path.exists():
+                raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    
+    return FileResponse(
+        path=path,
+        media_type=content_type,
+        filename=filename
+    )
 
 
 # Polling endpoint for progress updates
