@@ -586,36 +586,29 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             "output": to_dict(ctx.output),
         }
         
-        # Update job with completed status and result (synchronous call)
+        # Update job with completed status and result
         print(f"💾 Updating job {job_id} to completed status", flush=True)
-        try:
-            success = update_job_in_db(job_id, {
-                "status": "completed",
-                "result": result
-            })
-            if not success:
-                raise Exception("update_job_in_db returned False")
-            
-            # Sanity check: verify the update actually persisted
-            if supabase:
-                check = supabase.table("pipeline_jobs").select("status,current_stage,completed_stages,updated_at").eq("id", job_id).execute()
-                check_err = getattr(check, "error", None)
-                check_data = getattr(check, "data", None)
-                print(f"🔍 DB CHECK after completed update: data={check_data}, error={check_err}", flush=True)
-                if check_err:
-                    print(f"⚠️ Warning: Sanity check failed with error: {check_err}", flush=True)
-                elif not check_data or len(check_data) == 0:
-                    print(f"⚠️ Warning: Sanity check found no data for job {job_id}", flush=True)
-                elif check_data[0].get("status") != "completed":
-                    print(f"⚠️ Warning: Sanity check shows status is '{check_data[0].get('status')}', expected 'completed'", flush=True)
-            
-            print(f"✅ Job {job_id} status updated to completed", flush=True)
-        except Exception as update_error:
-            print(f"❌ Failed to update job status: {update_error}", flush=True)
-            import traceback
-            print(traceback.format_exc(), flush=True)
-            # Re-raise to ensure error is visible
-            raise
+        await update_job_in_db(job_id, {
+            "status": "completed",
+            "result": result
+        })
+        
+        # Sanity check: verify the update actually persisted
+        if supabase:
+            def _check():
+                return supabase.table("pipeline_jobs").select("status,current_stage,completed_stages,updated_at").eq("id", job_id).execute()
+            check = await asyncio.to_thread(_check)
+            check_err = getattr(check, "error", None)
+            check_data = getattr(check, "data", None)
+            print(f"🔍 DB CHECK after completed update: data={check_data}, error={check_err}", flush=True)
+            if check_err:
+                print(f"⚠️ Warning: Sanity check failed with error: {check_err}", flush=True)
+            elif not check_data or len(check_data) == 0:
+                print(f"⚠️ Warning: Sanity check found no data for job {job_id}", flush=True)
+            elif check_data[0].get("status") != "completed":
+                print(f"⚠️ Warning: Sanity check shows status is '{check_data[0].get('status')}', expected 'completed'", flush=True)
+        
+        print(f"✅ Job {job_id} status updated to completed", flush=True)
         
     except Exception as e:
         # Update job with failed status and error
