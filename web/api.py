@@ -210,17 +210,12 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             detail="Supabase Auth not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
         )
     
-    # Defensive check - ensure credentials is not None
-    if credentials is None:
-        raise HTTPException(status_code=401, detail="Authorization header required")
-    
-    # Defensive check - ensure credentials object has the credentials attribute
-    if not hasattr(credentials, 'credentials'):
-        raise HTTPException(status_code=401, detail="Invalid authorization header format")
-    
-    # Defensive check - ensure credentials.credentials is not None
-    if credentials.credentials is None:
-        raise HTTPException(status_code=401, detail="Authorization token is missing")
+    # Check for missing credentials - return proper 401
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Authorization header"
+        )
     
     token = credentials.credentials
     

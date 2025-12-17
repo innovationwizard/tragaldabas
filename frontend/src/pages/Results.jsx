@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
+import { supabase } from '../lib/supabase'
 import Layout from '../components/Layout'
 
 const Results = () => {
@@ -224,12 +225,38 @@ const Results = () => {
                       <p className="text-brand-muted text-sm mb-2">
                         PowerPoint file generated
                       </p>
-                      <a
-                        href={`/api/pipeline/jobs/${jobId}/download/pptx`}
+                      <button
+                        onClick={async () => {
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession()
+                            if (!session?.access_token) {
+                              alert('Please log in to download files')
+                              return
+                            }
+                            const response = await fetch(`/api/pipeline/jobs/${jobId}/download/pptx`, {
+                              headers: { Authorization: `Bearer ${session.access_token}` }
+                            })
+                            if (!response.ok) {
+                              throw new Error(`Download failed: ${response.statusText}`)
+                            }
+                            const blob = await response.blob()
+                            const url = window.URL.createObjectURL(blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = `${job.filename || 'presentation'}.pptx`
+                            document.body.appendChild(a)
+                            a.click()
+                            window.URL.revokeObjectURL(url)
+                            document.body.removeChild(a)
+                          } catch (error) {
+                            console.error('Download error:', error)
+                            alert(`Failed to download: ${error.message}`)
+                          }
+                        }}
                         className="btn-secondary text-sm"
                       >
                         Download PPTX
-                      </a>
+                      </button>
                     </div>
                   )}
                   {result.output.text_file_path && (
@@ -238,12 +265,38 @@ const Results = () => {
                       <p className="text-brand-muted text-sm mb-2">
                         Text insights file
                       </p>
-                      <a
-                        href={`/api/pipeline/jobs/${jobId}/download/txt`}
+                      <button
+                        onClick={async () => {
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession()
+                            if (!session?.access_token) {
+                              alert('Please log in to download files')
+                              return
+                            }
+                            const response = await fetch(`/api/pipeline/jobs/${jobId}/download/txt`, {
+                              headers: { Authorization: `Bearer ${session.access_token}` }
+                            })
+                            if (!response.ok) {
+                              throw new Error(`Download failed: ${response.statusText}`)
+                            }
+                            const blob = await response.blob()
+                            const url = window.URL.createObjectURL(blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = `${job.filename || 'insights'}.txt`
+                            document.body.appendChild(a)
+                            a.click()
+                            window.URL.revokeObjectURL(url)
+                            document.body.removeChild(a)
+                          } catch (error) {
+                            console.error('Download error:', error)
+                            alert(`Failed to download: ${error.message}`)
+                          }
+                        }}
                         className="btn-secondary text-sm"
                       >
                         Download TXT
-                      </a>
+                      </button>
                     </div>
                   )}
                 </div>
