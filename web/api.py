@@ -973,7 +973,25 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
     if not file_path:
         raise HTTPException(status_code=404, detail=f"{file_type} file not generated")
     
-    # Check if file exists
+    # Try to download from Supabase Storage first (if files were uploaded there)
+    # Output files should be stored at: {user_id}/{job_id}/outputs/{filename}
+    if supabase:
+        try:
+            storage_path = f"{user_id}/{job_id}/outputs/{filename}"
+            file_data = supabase.storage.from_("uploads").download(storage_path)
+            
+            if file_data:
+                from fastapi.responses import Response
+                return Response(
+                    content=file_data if isinstance(file_data, bytes) else file_data.read(),
+                    media_type=content_type,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                )
+        except Exception as e:
+            print(f"⚠️ Could not download from Supabase Storage: {e}", flush=True)
+            # Fall through to try local filesystem
+    
+    # Fallback: Try local filesystem (only works if running on same machine as worker)
     path = Path(file_path)
     if not path.exists():
         # Try relative to OUTPUT_DIR
@@ -986,7 +1004,10 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
             if not path.exists() and file_type == "pptx":
                 path = Path(output_dir) / "presentations" / path.name
             if not path.exists():
-                raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"File not found. Output files are stored on the worker and need to be uploaded to Supabase Storage. File path: {file_path}"
+                )
     
     return FileResponse(
         path=path,
