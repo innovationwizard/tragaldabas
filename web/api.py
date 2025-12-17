@@ -44,6 +44,12 @@ async def get_credentials_or_none(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> Optional[HTTPAuthorizationCredentials]:
     """Dependency to get credentials or None"""
+    # Explicitly handle None case
+    if credentials is None:
+        return None
+    # Validate credentials object has required attribute
+    if not hasattr(credentials, 'credentials'):
+        return None
     return credentials
 
 app = FastAPI(
@@ -204,11 +210,17 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             detail="Supabase Auth not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
         )
     
+    # Defensive check - ensure credentials is not None
     if credentials is None:
         raise HTTPException(status_code=401, detail="Authorization header required")
     
-    if not hasattr(credentials, 'credentials') or credentials.credentials is None:
+    # Defensive check - ensure credentials object has the credentials attribute
+    if not hasattr(credentials, 'credentials'):
         raise HTTPException(status_code=401, detail="Invalid authorization header format")
+    
+    # Defensive check - ensure credentials.credentials is not None
+    if credentials.credentials is None:
+        raise HTTPException(status_code=401, detail="Authorization token is missing")
     
     token = credentials.credentials
     
