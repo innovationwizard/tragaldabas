@@ -580,11 +580,46 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         def to_dict(model):
             if model is None:
                 return None
+            
+            # Handle DataFrames - convert to serializable format
+            import pandas as pd
+            if isinstance(model, pd.DataFrame):
+                # Convert DataFrame to dict with metadata
+                return {
+                    "_type": "DataFrame",
+                    "shape": model.shape,
+                    "columns": model.columns.tolist(),
+                    "sample": model.head(10).to_dict(orient='records') if len(model) > 0 else []
+                }
+            
+            # Handle dicts that might contain DataFrames
+            if isinstance(model, dict):
+                result = {}
+                for key, value in model.items():
+                    if isinstance(value, pd.DataFrame):
+                        result[key] = {
+                            "_type": "DataFrame",
+                            "shape": value.shape,
+                            "columns": value.columns.tolist(),
+                            "sample": value.head(10).to_dict(orient='records') if len(value) > 0 else []
+                        }
+                    else:
+                        result[key] = to_dict(value)
+                return result
+            
+            # Handle lists that might contain DataFrames
+            if isinstance(model, list):
+                return [to_dict(item) for item in model]
+            
+            # Handle Pydantic models
             if hasattr(model, 'model_dump'):
-                return model.model_dump()
+                dumped = model.model_dump()
+                return to_dict(dumped)  # Recursively handle nested DataFrames
             elif hasattr(model, 'dict'):
-                return model.dict()
-            return str(model)
+                dumped = model.dict()
+                return to_dict(dumped)  # Recursively handle nested DataFrames
+            
+            return model
         
         result = {
             "reception": to_dict(ctx.reception),
