@@ -358,7 +358,7 @@ async def upload_file(
         try:
             import httpx
             async with httpx.AsyncClient(timeout=10.0) as client:
-                await client.post(
+                response = await client.post(
                     edge_function_url,
                     json={"job_id": job_id},
                     headers={
@@ -366,8 +366,14 @@ async def upload_file(
                         "Content-Type": "application/json"
                     }
                 )
+                # Log response for debugging
+                if response.status_code != 200:
+                    error_text = await response.text()
+                    print(f"❌ Edge Function error ({response.status_code}): {error_text}")
+                else:
+                    print(f"✅ Edge Function called successfully for job {job_id}")
         except Exception as e:
-            print(f"Warning: Could not trigger Edge Function: {e}")
+            print(f"⚠️ Warning: Could not trigger Edge Function: {e}")
             import traceback
             print(traceback.format_exc())
     
