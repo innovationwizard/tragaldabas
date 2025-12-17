@@ -105,44 +105,102 @@ serve(async (req) => {
       authToken = supabaseServiceKey
     }
     
-    const vercelResponse = await fetch(processingUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`
-      },
-    })
-
-    if (!vercelResponse.ok) {
-      const errorText = await vercelResponse.text()
-      console.error(`Worker returned error (${vercelResponse.status}):`, errorText)
+    // Fire-and-forget worker call with timeout
+    // Pipeline processing can take minutes, so we don't wait for completion
+    // The worker will update the job status when it finishes
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+    
+    try {
+      const vercelResponse = await fetch(processingUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        signal: controller.signal
+      })
       
-      // Update job status to failed
-      await supabase
-        .from('pipeline_jobs')
-        .update({ 
-          status: 'failed', 
-          error: errorText.substring(0, 1000), // Limit error length
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', job_id)
+      clearTimeout(timeoutId)
+      
+      // Check if worker accepted the request (status 200-299)
+      if (vercelResponse.ok) {
+        // Try to read response, but don't wait if it's slow
+        try {
+          const result = await Promise.race([
+            vercelResponse.json(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Response read timeout')), 5000))
+          ])
+          console.log(`Worker accepted job ${job_id}:`, result)
+        } catch (e) {
+          // Response is slow, but that's OK - worker is processing
+          console.log(`Worker accepted job ${job_id} (response read timeout, but processing continues)`)
+        }
+        
+        return new Response(
+          JSON.stringify({ message: 'Job processing started', job_id }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      } else {
+        // Worker rejected the request immediately
+        const errorText = await vercelResponse.text()
+        console.error(`Worker returned error (${vercelResponse.status}):`, errorText)
+        
+        // Update job status to failed
+        await supabase
+          .from('pipeline_jobs')
+          .update({ 
+            status: 'failed', 
+            error: errorText.substring(0, 1000), // Limit error length
+            updated_at: new Date().toISOString() 
+          })
+          .eq('id', job_id)
 
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to process job', 
-          details: errorText,
-          status_code: vercelResponse.status
-        }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      )
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to process job', 
+            details: errorText,
+            status_code: vercelResponse.status
+          }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+    } catch (error) {
+      clearTimeout(timeoutId)
+      
+      if (error.name === 'AbortError') {
+        // Timeout - worker might still be processing, so don't fail the job
+        console.log(`Worker call timed out for job ${job_id}, but processing may continue`)
+        return new Response(
+          JSON.stringify({ 
+            message: 'Job processing started (worker call timeout, but processing continues)', 
+            job_id 
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      } else {
+        // Other error - network issue, etc.
+        console.error(`Error calling worker for job ${job_id}:`, error)
+        
+        // Update job status to failed
+        await supabase
+          .from('pipeline_jobs')
+          .update({ 
+            status: 'failed', 
+            error: `Failed to reach worker: ${error.message}`,
+            updated_at: new Date().toISOString() 
+          })
+          .eq('id', job_id)
+        
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to reach worker', 
+            details: error.message
+          }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
     }
-
-    const result = await vercelResponse.json()
-
-    return new Response(
-      JSON.stringify({ message: 'Job processing started', job_id, result }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    )
 
   } catch (error) {
     console.error('Edge Function error:', error)
