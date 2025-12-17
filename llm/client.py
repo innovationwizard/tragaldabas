@@ -22,10 +22,15 @@ except ImportError:
     OPENAI_AVAILABLE = False
 
 try:
-    import google.generativeai as genai
+    import google.genai as genai
     GEMINI_AVAILABLE = True
 except ImportError:
-    GEMINI_AVAILABLE = False
+    # Fallback to deprecated package for backward compatibility
+    try:
+        import google.generativeai as genai
+        GEMINI_AVAILABLE = True
+    except ImportError:
+        GEMINI_AVAILABLE = False
 
 
 class LLMClient:
@@ -65,8 +70,15 @@ class LLMClient:
         # Gemini (using GOOGLE_API_KEY)
         if GEMINI_AVAILABLE and settings.GOOGLE_API_KEY:
             try:
-                genai.configure(api_key=settings.GOOGLE_API_KEY)
-                providers[LLMProvider.GEMINI] = genai
+                # Try new google.genai API first
+                if hasattr(genai, 'Client'):
+                    # New API: google.genai
+                    client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+                    providers[LLMProvider.GEMINI] = client
+                else:
+                    # Old API: google.generativeai
+                    genai.configure(api_key=settings.GOOGLE_API_KEY)
+                    providers[LLMProvider.GEMINI] = genai
             except Exception:
                 pass
         
