@@ -191,6 +191,8 @@ async def worker_process(
         print(f"🚀 Starting pipeline processing for job {job_id}", flush=True)
         # Lazy import process_job
         process_job_func = get_process_job()
+        print("process_job_func file:", process_job_func.__code__.co_filename, flush=True)
+        print("process_job_func module:", process_job_func.__module__, flush=True)
         result = await process_job_func(job_id, request, mock_credentials)
         print(f"✅ Pipeline completed successfully for job {job_id}", flush=True)
         return result
