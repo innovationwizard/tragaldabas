@@ -89,11 +89,10 @@ def get_job_from_db(job_id: str) -> Optional[Dict[str, Any]]:
         print(f"Error fetching job from DB: {e}")
     return None
 
-async def update_job_in_db(job_id: str, updates: Dict[str, Any]) -> bool:
+async def update_job_in_db(job_id: str, updates: Dict[str, Any]) -> None:
     """Update job in Supabase database (async, non-blocking)"""
     if not supabase:
-        print(f"⚠️ Supabase client not initialized, cannot update job {job_id}", flush=True)
-        return False
+        raise RuntimeError(f"Supabase client not initialized, cannot update job {job_id}")
 
     updates["updated_at"] = datetime.utcnow().isoformat()
     print(f"💾 Updating job {job_id} with keys: {list(updates.keys())}", flush=True)
@@ -101,26 +100,17 @@ async def update_job_in_db(job_id: str, updates: Dict[str, Any]) -> bool:
     def _do():
         return supabase.table("pipeline_jobs").update(updates).eq("id", job_id).execute()
 
-    try:
-        res = await asyncio.to_thread(_do)
-        
-        err = getattr(res, "error", None)
-        data = getattr(res, "data", None)
+    res = await asyncio.to_thread(_do)
+    
+    err = getattr(res, "error", None)
+    data = getattr(res, "data", None)
 
-        if err:
-            print(f"❌ Supabase update error: {err}", flush=True)
-            return False
-        if not data:
-            print(f"❌ Supabase update affected 0 rows for job {job_id}", flush=True)
-            return False
+    if err:
+        raise RuntimeError(f"Supabase update error: {err}")
+    if not data:
+        raise RuntimeError(f"Supabase update affected 0 rows for job {job_id}")
 
-        print(f"✅ Job {job_id} updated", flush=True)
-        return True
-    except Exception as e:
-        print(f"❌ Exception updating job {job_id} in DB: {e}", flush=True)
-        import traceback
-        print(traceback.format_exc(), flush=True)
-        return False
+    print(f"✅ Job {job_id} updated", flush=True)
 
 def create_job_in_db(job_data: Dict[str, Any]):
     """Create job in Supabase database (synchronous)"""
@@ -174,8 +164,8 @@ class WebUserPrompt:
             "type": "yes_no",
             "question": question
         })
-        # Update questions in database (non-critical, fire-and-forget)
-        asyncio.create_task(update_job_in_db(self.job_id, {"questions": self.pending_questions}))
+        # Update questions in database
+        await update_job_in_db(self.job_id, {"questions": self.pending_questions})
         # In real implementation, wait for user response via polling
         # For now, default to yes
         return True
@@ -500,11 +490,11 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         async def start_stage(self, stage_num: int, stage_name: str):
             self.current_stage = stage_num
             self.stage_name = stage_name
-            # Update job in database for polling (non-critical, fire-and-forget)
-            asyncio.create_task(update_job_in_db(self.job_id, {
+            # Update job in database for polling
+            await update_job_in_db(self.job_id, {
                 "current_stage": stage_num,
                 "current_stage_name": stage_name
-            }))
+            })
         
         async def complete_stage(self, stage_num: int):
             # Get current completed stages and update
@@ -513,28 +503,23 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 completed = job.get("completed_stages", []) or []
                 if stage_num not in completed:
                     completed.append(stage_num)
-                    # Non-critical update, fire-and-forget
-                    asyncio.create_task(update_job_in_db(self.job_id, {"completed_stages": completed}))
+                    await update_job_in_db(self.job_id, {"completed_stages": completed})
         
         async def fail(self, stage_num: int, error: str):
-            # Update job status in database (critical - must await)
-            success = await update_job_in_db(self.job_id, {
+            # Update job status in database
+            await update_job_in_db(self.job_id, {
                 "status": "failed",
                 "error": error,
                 "failed_stage": stage_num
             })
-            if not success:
-                print(f"⚠️ Warning: Failed to update job {self.job_id} status to failed", flush=True)
         
         async def complete(self):
-            # Update job status in database (critical - must await)
-            success = await update_job_in_db(self.job_id, {
+            # Update job status in database
+            await update_job_in_db(self.job_id, {
                 "status": "completed",
                 "current_stage": 7,  # Output stage
                 "current_stage_name": "Output"
             })
-            if not success:
-                print(f"⚠️ Warning: Failed to update job {self.job_id} status to completed in progress tracker", flush=True)
     
     # Make WebUserPrompt inherit from UserPrompt
     class WebUserPrompt(UserPrompt):
@@ -553,8 +538,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 "type": "yes_no",
                 "question": question
             })
-            # Update questions in database (non-critical, fire-and-forget)
-            asyncio.create_task(update_job_in_db(self.job_id, {"questions": self.pending_questions}))
+            # Update questions in database
+            await update_job_in_db(self.job_id, {"questions": self.pending_questions})
             # In real implementation, wait for user response via polling
             # For now, default to yes
             return True
@@ -566,7 +551,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             return Domain.FINANCIAL  # Default
     
     try:
-        # Update job status to running (critical - must await)
+        # Update job status to running
         await update_job_in_db(job_id, {"status": "running"})
         
         progress = WebProgressTracker(job_id)
