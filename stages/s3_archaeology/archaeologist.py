@@ -68,10 +68,15 @@ class Archaeologist(Stage[Dict[str, Any], ArchaeologyResult]):
             result = self.prompt_builder.parse_response(response)
             
             # Build archaeology map
+            # Handle None values - .get() only uses default if key doesn't exist, not if value is None
+            data_start_row = result.get("data_start_row")
+            if data_start_row is None:
+                data_start_row = 1
+            
             arch_map = ArchaeologyMap(
                 sheet_name=preview.sheet_name,
                 header_row=result.get("header_row"),
-                data_start_row=result.get("data_start_row", 1),
+                data_start_row=data_start_row,
                 data_end_row=result.get("data_end_row"),
                 noise_rows=result.get("noise_rows", []),
                 noise_columns=result.get("noise_columns", []),
