@@ -618,22 +618,24 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             raise
         
     except Exception as e:
-        # Update job with failed status and error (synchronous call)
+        # Update job with failed status and error
         error_msg = str(e)
         print(f"❌ Pipeline failed for job {job_id}: {error_msg}", flush=True)
         import traceback
         print(traceback.format_exc(), flush=True)
+        
+        # Try to update status, but don't swallow the original exception
         try:
-            success = update_job_in_db(job_id, {
+            await update_job_in_db(job_id, {
                 "status": "failed",
                 "error": error_msg
             })
-            if not success:
-                print(f"⚠️ Warning: update_job_in_db returned False for failed status", flush=True)
             
             # Sanity check: verify the update actually persisted
             if supabase:
-                check = supabase.table("pipeline_jobs").select("status,error,updated_at").eq("id", job_id).execute()
+                def _check():
+                    return supabase.table("pipeline_jobs").select("status,error,updated_at").eq("id", job_id).execute()
+                check = await asyncio.to_thread(_check)
                 check_err = getattr(check, "error", None)
                 check_data = getattr(check, "data", None)
                 print(f"🔍 DB CHECK after failed update: data={check_data}, error={check_err}", flush=True)
@@ -649,6 +651,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             print(f"❌ Failed to update job status to failed: {update_error}", flush=True)
             import traceback
             print(traceback.format_exc(), flush=True)
+            # Don't swallow - re-raise the original exception
+        raise
 
 
 @app.post("/api/pipeline/process/{job_id}")
