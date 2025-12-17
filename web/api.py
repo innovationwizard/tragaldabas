@@ -593,10 +593,26 @@ async def process_job(
     try:
         # Download file from Supabase Storage
         print(f"📥 Downloading file from Supabase Storage: {storage_path}", flush=True)
-        file_data = supabase.storage.from_("uploads").download(storage_path)
+        print(f"   Bucket: uploads", flush=True)
+        print(f"   Full path: {storage_path}", flush=True)
+        
+        file_response = supabase.storage.from_("uploads").download(storage_path)
+        
+        if file_response is None:
+            raise Exception("File data is None - file may not exist in Storage")
+        
+        # Handle both bytes and response objects
+        if isinstance(file_response, bytes):
+            file_data = file_response
+        elif hasattr(file_response, 'read'):
+            file_data = file_response.read()
+        else:
+            file_data = file_response
         
         if not file_data:
-            raise Exception("File data is None")
+            raise Exception("File data is empty")
+        
+        print(f"   Downloaded {len(file_data)} bytes", flush=True)
         
         # Save to local filesystem for processing
         output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
@@ -608,6 +624,7 @@ async def process_job(
             f.write(file_data)
         
         print(f"✅ File downloaded and saved to: {file_path}", flush=True)
+        print(f"   File size: {file_path.stat().st_size} bytes", flush=True)
         
     except Exception as e:
         import traceback
