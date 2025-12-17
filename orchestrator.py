@@ -81,11 +81,18 @@ class Orchestrator:
             # Stage 7: Output
             ctx.output = await self._execute_stage(7, ctx.analysis)
             
-            self.progress.complete()
+            # Handle both sync and async progress trackers
+            complete_result = self.progress.complete()
+            if hasattr(complete_result, '__await__'):
+                await complete_result
+            
             return ctx
             
         except StageError as e:
-            self.progress.fail(e.stage, str(e))
+            # Handle both sync and async progress trackers
+            fail_result = self.progress.fail(e.stage, str(e))
+            if hasattr(fail_result, '__await__'):
+                await fail_result
             raise PipelineError(f"Pipeline failed at stage {e.stage}: {e}", stage=e.stage)
     
     async def _structured_path(self, ctx: PipelineContext) -> PipelineContext:
@@ -130,14 +137,21 @@ class Orchestrator:
         """Execute a single stage with progress tracking"""
         stage = self.stages[stage_num]
         
-        self.progress.start_stage(stage_num, stage.name)
+        # Handle both sync and async progress trackers
+        start_result = self.progress.start_stage(stage_num, stage.name)
+        if hasattr(start_result, '__await__'):
+            await start_result
         
         if not stage.validate_input(input_data):
             raise StageError(stage_num, "Invalid input")
         
         result = await stage.execute(input_data)
         
-        self.progress.complete_stage(stage_num)
+        # Handle both sync and async progress trackers
+        complete_result = self.progress.complete_stage(stage_num)
+        if hasattr(complete_result, '__await__'):
+            await complete_result
+        
         return result
     
     async def _confirm_classification(
