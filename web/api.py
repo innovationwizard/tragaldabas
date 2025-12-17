@@ -94,14 +94,27 @@ def update_job_in_db(job_id: str, updates: Dict[str, Any]):
     if not supabase:
         print(f"⚠️ Supabase client not initialized, cannot update job {job_id}", flush=True)
         return False
+
+    updates["updated_at"] = datetime.utcnow().isoformat()
+    print(f"💾 Updating job {job_id} with: {list(updates.keys())}", flush=True)
+
     try:
-        updates["updated_at"] = datetime.utcnow().isoformat()
-        print(f"💾 Updating job {job_id} with: {list(updates.keys())}", flush=True)
-        response = supabase.table("pipeline_jobs").update(updates).eq("id", job_id).execute()
+        res = supabase.table("pipeline_jobs").update(updates).eq("id", job_id).execute()
+        
+        err = getattr(res, "error", None)
+        data = getattr(res, "data", None)
+
+        if err:
+            print(f"❌ Supabase update error for job {job_id}: {err}", flush=True)
+            return False
+        if not data:
+            print(f"❌ Supabase update affected 0 rows for job {job_id}", flush=True)
+            return False
+
         print(f"✅ Job {job_id} updated successfully", flush=True)
         return True
     except Exception as e:
-        print(f"❌ Error updating job {job_id} in DB: {e}", flush=True)
+        print(f"❌ Exception updating job {job_id} in DB: {e}", flush=True)
         import traceback
         print(traceback.format_exc(), flush=True)
         return False
@@ -404,6 +417,65 @@ async def upload_file(
     return {"job_id": job_id, "status": "pending", "message": "Job created, processing will start shortly"}
 
 
+@app.post("/api/pipeline/jobs/{job_id}/retry")
+async def retry_job(
+    job_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Manually trigger processing for a stuck job"""
+    from config import settings
+    import httpx
+    
+    # Get job from database
+    job = get_job_from_db(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Verify ownership
+    if job.get("user_id") != user.get("id"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check if job can be retried
+    if job.get("status") not in ["pending", "failed"]:
+        return {
+            "message": f"Job is already {job.get('status')}, cannot retry",
+            "job_id": job_id,
+            "status": job.get("status")
+        }
+    
+    # Trigger Edge Function
+    edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
+    
+    try:
+        print(f"🔄 Retrying job {job_id}", flush=True)
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                edge_function_url,
+                json={"job_id": job_id},
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                    "Content-Type": "application/json"
+                }
+            )
+            if response.status_code != 200:
+                error_text = await response.text()
+                print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
+                raise HTTPException(status_code=500, detail=f"Failed to trigger processing: {error_text}")
+            else:
+                print(f"✅ Edge Function triggered successfully for job {job_id}", flush=True)
+                return {
+                    "message": "Job processing triggered",
+                    "job_id": job_id
+                }
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Edge Function call timed out")
+    except Exception as e:
+        print(f"❌ Error retrying job {job_id}: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retry job: {str(e)}")
+
+
 async def run_pipeline(job_id: str, file_path: str, user_id: str):
     """Run pipeline in background - lazy imports to reduce serverless function size"""
     # Lazy import heavy dependencies only when pipeline runs
@@ -442,19 +514,23 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         
         def fail(self, stage_num: int, error: str):
             # Update job status in database (synchronous call)
-            update_job_in_db(self.job_id, {
+            success = update_job_in_db(self.job_id, {
                 "status": "failed",
                 "error": error,
                 "failed_stage": stage_num
             })
+            if not success:
+                print(f"⚠️ Warning: Failed to update job {self.job_id} status to failed", flush=True)
         
         def complete(self):
             # Update job status in database (synchronous call)
-            update_job_in_db(self.job_id, {
+            success = update_job_in_db(self.job_id, {
                 "status": "completed",
                 "current_stage": 7,  # Output stage
                 "current_stage_name": "Output"
             })
+            if not success:
+                print(f"⚠️ Warning: Failed to update job {self.job_id} status to completed in progress tracker", flush=True)
     
     # Make WebUserPrompt inherit from UserPrompt
     class WebUserPrompt(UserPrompt):
@@ -524,10 +600,26 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         # Update job with completed status and result (synchronous call)
         print(f"💾 Updating job {job_id} to completed status", flush=True)
         try:
-            update_job_in_db(job_id, {
+            success = update_job_in_db(job_id, {
                 "status": "completed",
                 "result": result
             })
+            if not success:
+                raise Exception("update_job_in_db returned False")
+            
+            # Sanity check: verify the update actually persisted
+            if supabase:
+                check = supabase.table("pipeline_jobs").select("status,current_stage,completed_stages,updated_at").eq("id", job_id).execute()
+                check_err = getattr(check, "error", None)
+                check_data = getattr(check, "data", None)
+                print(f"🔍 DB CHECK after completed update: data={check_data}, error={check_err}", flush=True)
+                if check_err:
+                    print(f"⚠️ Warning: Sanity check failed with error: {check_err}", flush=True)
+                elif not check_data or len(check_data) == 0:
+                    print(f"⚠️ Warning: Sanity check found no data for job {job_id}", flush=True)
+                elif check_data[0].get("status") != "completed":
+                    print(f"⚠️ Warning: Sanity check shows status is '{check_data[0].get('status')}', expected 'completed'", flush=True)
+            
             print(f"✅ Job {job_id} status updated to completed", flush=True)
         except Exception as update_error:
             print(f"❌ Failed to update job status: {update_error}", flush=True)
@@ -543,10 +635,26 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         import traceback
         print(traceback.format_exc(), flush=True)
         try:
-            update_job_in_db(job_id, {
+            success = update_job_in_db(job_id, {
                 "status": "failed",
                 "error": error_msg
             })
+            if not success:
+                print(f"⚠️ Warning: update_job_in_db returned False for failed status", flush=True)
+            
+            # Sanity check: verify the update actually persisted
+            if supabase:
+                check = supabase.table("pipeline_jobs").select("status,error,updated_at").eq("id", job_id).execute()
+                check_err = getattr(check, "error", None)
+                check_data = getattr(check, "data", None)
+                print(f"🔍 DB CHECK after failed update: data={check_data}, error={check_err}", flush=True)
+                if check_err:
+                    print(f"⚠️ Warning: Sanity check failed with error: {check_err}", flush=True)
+                elif not check_data or len(check_data) == 0:
+                    print(f"⚠️ Warning: Sanity check found no data for job {job_id}", flush=True)
+                elif check_data[0].get("status") != "failed":
+                    print(f"⚠️ Warning: Sanity check shows status is '{check_data[0].get('status')}', expected 'failed'", flush=True)
+            
             print(f"✅ Job {job_id} status updated to failed", flush=True)
         except Exception as update_error:
             print(f"❌ Failed to update job status to failed: {update_error}", flush=True)
