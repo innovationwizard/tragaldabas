@@ -15,6 +15,6 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-      - key: GOOGLE_GENERATIVE_AI_API_KEY
+      - key: GOOGLE_API_KEY
         sync: false
 

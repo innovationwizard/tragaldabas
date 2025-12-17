@@ -10,7 +10,7 @@ const Results = () => {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   
-  // Helper to safely render chip text (handles objects, strings, etc.)
+  // Helper to safely render chip text (handles objects, strings, trash, etc.)
   const chipText = (v) =>
     typeof v === 'string' ? v : (v?.name ?? v?.label ?? v?.headline ?? JSON.stringify(v))
 
