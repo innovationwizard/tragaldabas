@@ -29,7 +29,9 @@ const Landing = () => {
 
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <div className="card">
-              <div className="text-brand-primary text-3xl mb-4">⚡</div>
+              <div className="text-brand-primary mb-4">
+                <Zap className="w-12 h-12" />
+              </div>
               <h3 className="text-xl font-semibold mb-2">7-Stage Pipeline</h3>
               <p className="text-brand-muted">
                 Reception → Classification → Structure → Archaeology → Reconciliation → ETL → Analysis
@@ -37,7 +39,9 @@ const Landing = () => {
             </div>
             
             <div className="card">
-              <div className="text-brand-primary text-3xl mb-4">📊</div>
+              <div className="text-brand-primary mb-4">
+                <BarChart3 className="w-12 h-12" />
+              </div>
               <h3 className="text-xl font-semibold mb-2">Multi-Format Support</h3>
               <p className="text-brand-muted">
                 Excel (.xlsx, .xls), CSV, Word (.docx), PowerPoint (.pptx)... → Handles more formats than you do!
@@ -45,7 +49,9 @@ const Landing = () => {
             </div>
             
             <div className="card">
-              <div className="text-brand-primary text-3xl mb-4">🤖</div>
+              <div className="text-brand-primary mb-4">
+                <Bot className="w-12 h-12" />
+              </div>
               <h3 className="text-xl font-semibold mb-2">LLM-Powered</h3>
               <p className="text-brand-muted">
                 Multi-engine, multi-model, multi-layer learning design, with industrial-grade reliability.
