@@ -228,26 +228,29 @@ const Results = () => {
                       <button
                         onClick={async () => {
                           try {
-                            const { data: { session } } = await supabase.auth.getSession()
-                            if (!session?.access_token) {
+                            const { data } = await supabase.auth.getSession()
+                            const token = data.session?.access_token
+                            
+                            if (!token) {
                               alert('Please log in to download files')
                               return
                             }
-                            const response = await fetch(`/api/pipeline/jobs/${jobId}/download/pptx`, {
-                              headers: { Authorization: `Bearer ${session.access_token}` }
+                            
+                            const res = await fetch(`/api/pipeline/jobs/${jobId}/download/pptx`, {
+                              headers: { Authorization: `Bearer ${token}` }
                             })
-                            if (!response.ok) {
-                              throw new Error(`Download failed: ${response.statusText}`)
+                            
+                            if (!res.ok) {
+                              const errorText = await res.text()
+                              throw new Error(errorText || `Download failed: ${res.statusText}`)
                             }
-                            const blob = await response.blob()
-                            const url = window.URL.createObjectURL(blob)
+                            
+                            const blob = await res.blob()
                             const a = document.createElement('a')
-                            a.href = url
-                            a.download = `${job.filename || 'presentation'}.pptx`
-                            document.body.appendChild(a)
+                            a.href = URL.createObjectURL(blob)
+                            a.download = `tragaldabas-${jobId}.pptx`
                             a.click()
-                            window.URL.revokeObjectURL(url)
-                            document.body.removeChild(a)
+                            URL.revokeObjectURL(a.href)
                           } catch (error) {
                             console.error('Download error:', error)
                             alert(`Failed to download: ${error.message}`)
@@ -268,26 +271,29 @@ const Results = () => {
                       <button
                         onClick={async () => {
                           try {
-                            const { data: { session } } = await supabase.auth.getSession()
-                            if (!session?.access_token) {
+                            const { data } = await supabase.auth.getSession()
+                            const token = data.session?.access_token
+                            
+                            if (!token) {
                               alert('Please log in to download files')
                               return
                             }
-                            const response = await fetch(`/api/pipeline/jobs/${jobId}/download/txt`, {
-                              headers: { Authorization: `Bearer ${session.access_token}` }
+                            
+                            const res = await fetch(`/api/pipeline/jobs/${jobId}/download/txt`, {
+                              headers: { Authorization: `Bearer ${token}` }
                             })
-                            if (!response.ok) {
-                              throw new Error(`Download failed: ${response.statusText}`)
+                            
+                            if (!res.ok) {
+                              const errorText = await res.text()
+                              throw new Error(errorText || `Download failed: ${res.statusText}`)
                             }
-                            const blob = await response.blob()
-                            const url = window.URL.createObjectURL(blob)
+                            
+                            const blob = await res.blob()
                             const a = document.createElement('a')
-                            a.href = url
-                            a.download = `${job.filename || 'insights'}.txt`
-                            document.body.appendChild(a)
+                            a.href = URL.createObjectURL(blob)
+                            a.download = `tragaldabas-${jobId}.txt`
                             a.click()
-                            window.URL.revokeObjectURL(url)
-                            document.body.removeChild(a)
+                            URL.revokeObjectURL(a.href)
                           } catch (error) {
                             console.error('Download error:', error)
                             alert(`Failed to download: ${error.message}`)
