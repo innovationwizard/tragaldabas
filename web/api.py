@@ -583,8 +583,17 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             
             # Handle datetime objects - convert to ISO format string
             from datetime import datetime, date
+            import math
             if isinstance(model, (datetime, date)):
                 return model.isoformat()
+            
+            # Handle special float values (NaN, infinity) - convert to None or string
+            if isinstance(model, float):
+                if math.isnan(model):
+                    return None
+                elif math.isinf(model):
+                    return "infinity" if model > 0 else "-infinity"
+                return model
             
             # Handle DataFrames - convert to serializable format
             import pandas as pd
@@ -597,7 +606,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                     "sample": model.head(10).to_dict(orient='records') if len(model) > 0 else []
                 }
             
-            # Handle dicts that might contain DataFrames or datetimes
+            # Handle dicts that might contain DataFrames, datetimes, or NaN values
             if isinstance(model, dict):
                 result = {}
                 for key, value in model.items():
@@ -610,21 +619,28 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                         }
                     elif isinstance(value, (datetime, date)):
                         result[key] = value.isoformat()
+                    elif isinstance(value, float):
+                        if math.isnan(value):
+                            result[key] = None
+                        elif math.isinf(value):
+                            result[key] = "infinity" if value > 0 else "-infinity"
+                        else:
+                            result[key] = value
                     else:
                         result[key] = to_dict(value)
                 return result
             
-            # Handle lists that might contain DataFrames or datetimes
+            # Handle lists that might contain DataFrames, datetimes, or NaN values
             if isinstance(model, list):
                 return [to_dict(item) for item in model]
             
             # Handle Pydantic models
             if hasattr(model, 'model_dump'):
                 dumped = model.model_dump()
-                return to_dict(dumped)  # Recursively handle nested DataFrames/datetimes
+                return to_dict(dumped)  # Recursively handle nested DataFrames/datetimes/NaN
             elif hasattr(model, 'dict'):
                 dumped = model.dict()
-                return to_dict(dumped)  # Recursively handle nested DataFrames/datetimes
+                return to_dict(dumped)  # Recursively handle nested DataFrames/datetimes/NaN
             
             return model
         
