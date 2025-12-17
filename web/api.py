@@ -1035,21 +1035,39 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
         raise HTTPException(status_code=404, detail=f"{file_type} file not generated")
     
     # Try to download from Supabase Storage first (if files were uploaded there)
-    # Output files should be stored at: {user_id}/{job_id}/outputs/{filename}
+    # Check for storage paths in output result first
+    storage_path = None
+    if file_type == "txt":
+        storage_path = output.get("text_file_storage_path")
+    elif file_type == "pptx":
+        storage_path = output.get("pptx_file_storage_path")
+    elif file_type == "md":
+        storage_path = output.get("markdown_file_storage_path")
+    
+    # Fallback to default path structure if not in result
+    if not storage_path:
+        storage_path = f"{user_id}/{job_id}/outputs/{filename}"
+    
     if supabase:
         try:
-            storage_path = f"{user_id}/{job_id}/outputs/{filename}"
+            print(f"📥 Downloading output file from Supabase Storage: {storage_path}", flush=True)
             file_data = supabase.storage.from_("uploads").download(storage_path)
             
             if file_data:
                 from fastapi.responses import Response
+                content = file_data if isinstance(file_data, bytes) else file_data.read()
+                print(f"✅ Downloaded {len(content)} bytes from Storage", flush=True)
                 return Response(
-                    content=file_data if isinstance(file_data, bytes) else file_data.read(),
+                    content=content,
                     media_type=content_type,
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'}
                 )
+            else:
+                print(f"⚠️ File data is None from Storage path: {storage_path}", flush=True)
         except Exception as e:
             print(f"⚠️ Could not download from Supabase Storage: {e}", flush=True)
+            import traceback
+            print(traceback.format_exc(), flush=True)
             # Fall through to try local filesystem
     
     # Fallback: Try local filesystem (only works if running on same machine as worker)
