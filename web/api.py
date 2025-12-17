@@ -195,11 +195,8 @@ async def get_current_user(
 ) -> dict:
     """Get current user from Supabase Auth"""
     if not credentials or not credentials.credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
+
     token = credentials.credentials
     
     if not supabase:
@@ -208,25 +205,12 @@ async def get_current_user(
             detail="Supabase Auth not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
         )
     
-    try:
-        # Verify token with Supabase
-        user_response = supabase.auth.get_user(token)
-        if not user_response.user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        
-        # Convert Supabase User object to dict
-        user = user_response.user
-        return {
-            "id": user.id,
-            "email": user.email,
-            "user_metadata": user.user_metadata or {},
-            "created_at": user.created_at,
-            "email_confirmed": user.email_confirmed_at is not None
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Authentication failed: {str(e)}")
+    user_response = supabase.auth.get_user(token)
+    if not user_response.user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    u = user_response.user
+    return {"id": u.id, "email": u.email, "user_metadata": u.user_metadata or {}}
 
 
 # Auth endpoints (Supabase Auth)
