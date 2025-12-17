@@ -80,13 +80,26 @@ if static_dir.exists():
 def get_job_from_db(job_id: str) -> Optional[Dict[str, Any]]:
     """Get job from Supabase database"""
     if not supabase:
+        print(f"⚠️ Supabase client not initialized, cannot fetch job {job_id}", flush=True)
         return None
     try:
         response = supabase.table("pipeline_jobs").select("*").eq("id", job_id).execute()
+        
+        # Check for errors in response
+        if hasattr(response, 'error') and response.error:
+            print(f"❌ Supabase error fetching job {job_id}: {response.error}", flush=True)
+            return None
+        
         if response.data and len(response.data) > 0:
+            print(f"✅ Found job {job_id} in database: status={response.data[0].get('status')}", flush=True)
             return response.data[0]
+        else:
+            print(f"⚠️ Job {job_id} not found in database (no rows returned)", flush=True)
+            return None
     except Exception as e:
-        print(f"Error fetching job from DB: {e}")
+        print(f"❌ Exception fetching job {job_id} from DB: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
     return None
 
 async def update_job_in_db(job_id: str, updates: Dict[str, Any]) -> None:
@@ -1101,12 +1114,24 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
     """Get current job status for polling from Supabase database"""
     user_id = user.get("id")
     
-    job = get_job_from_db(job_id)  # Synchronous call
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    print(f"📊 Status endpoint called for job {job_id} by user {user_id}", flush=True)
     
-    if job.get("user_id") != user_id:
+    if not user_id:
+        print(f"❌ No user_id in user dict: {user}", flush=True)
+        raise HTTPException(status_code=401, detail="User ID not found")
+    
+    job = get_job_from_db(job_id)  # Synchronous call
+    
+    if not job:
+        print(f"❌ Job {job_id} not found in database", flush=True)
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    
+    job_user_id = job.get("user_id")
+    if job_user_id != user_id:
+        print(f"❌ Access denied: job user_id={job_user_id}, request user_id={user_id}", flush=True)
         raise HTTPException(status_code=403, detail="Access denied")
+    
+    print(f"✅ Returning status for job {job_id}: status={job.get('status')}, stage={job.get('current_stage')}", flush=True)
     
     return {
         "id": job.get("id"),

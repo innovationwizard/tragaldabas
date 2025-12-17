@@ -46,7 +46,14 @@ const Pipeline = () => {
 
   const pollJobStatus = async () => {
     try {
-      const response = await axios.get(`/api/pipeline/jobs/${jobId}/status`)
+      // Ensure auth header is set
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await axios.get(`/api/pipeline/jobs/${jobId}/status`, { headers })
       const status = response.data
       
       // Update current stage from status
