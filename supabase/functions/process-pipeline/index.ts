@@ -6,6 +6,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const VERCEL_API_URL = Deno.env.get('VERCEL_API_URL') || 'https://tragaldabas.vercel.app'
 const WORKER_URL = Deno.env.get('WORKER_URL') || '' // Optional: Railway/Render worker URL
+const WORKER_API_KEY = Deno.env.get('WORKER_API_KEY') || '' // API key for Railway worker
 
 serve(async (req) => {
   try {
@@ -91,11 +92,20 @@ serve(async (req) => {
     
     console.log(`Calling processing endpoint: ${processingUrl}`)
     
+    // Use WORKER_API_KEY for Railway worker, supabaseServiceKey for Vercel API
+    const authToken = WORKER_URL && WORKER_API_KEY 
+      ? WORKER_API_KEY 
+      : supabaseServiceKey
+    
+    if (WORKER_URL && !WORKER_API_KEY) {
+      console.warn('⚠️ WORKER_URL is set but WORKER_API_KEY is not. Using supabaseServiceKey as fallback.')
+    }
+    
     const vercelResponse = await fetch(processingUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseServiceKey}`
+        'Authorization': `Bearer ${authToken}`
       },
     })
 
