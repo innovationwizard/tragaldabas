@@ -156,44 +156,60 @@ const Results = () => {
                     </div>
                   </div>
                 )}
+                {result.analysis.patterns_detected && result.analysis.patterns_detected.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold mb-2">Patterns Detected</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {result.analysis.patterns_detected.map((pattern, idx) => (
+                        <span key={idx} className="px-2 py-1 bg-brand-bg rounded text-sm">{pattern}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-4">
-                  {result.analysis.insights?.map((insight, idx) => {
-                    // Handle both object and string formats
-                    const headline = insight?.headline || insight?.title || `Insight ${idx + 1}`
-                    const detail = insight?.detail || insight?.description || ''
-                    const severity = insight?.severity || 'info'
-                    const implication = insight?.implication || ''
-                    const evidence = insight?.evidence || {}
-                    
-                    return (
-                      <div key={insight?.id || idx} className="card bg-brand-bg">
-                        <div className="flex items-start justify-between mb-2">
-                          <h3 className="font-semibold text-lg">{headline}</h3>
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            severity === 'critical' ? 'bg-red-100 text-red-800' :
-                            severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {severity}
-                          </span>
-                        </div>
-                        {detail && <p className="text-brand-text mb-2">{detail}</p>}
-                        {evidence && Object.keys(evidence).length > 0 && (
-                          <div className="mt-2 p-2 bg-brand-surface rounded text-sm">
-                            <p className="text-brand-muted text-xs mb-1">Evidence:</p>
-                            {evidence.metric && <p>Metric: {evidence.metric}</p>}
-                            {evidence.value !== undefined && <p>Value: {evidence.value}</p>}
-                            {evidence.comparison && <p>Comparison: {evidence.comparison}</p>}
-                            {evidence.delta !== undefined && <p>Delta: {evidence.delta}</p>}
-                            {evidence.delta_percent !== undefined && <p>Delta %: {evidence.delta_percent}%</p>}
+                  {result.analysis.insights && result.analysis.insights.length > 0 ? (
+                    result.analysis.insights.map((insight, idx) => {
+                      // Handle both object and string formats
+                      const headline = insight?.headline || insight?.title || `Insight ${idx + 1}`
+                      const detail = insight?.detail || insight?.description || ''
+                      const severity = insight?.severity || 'info'
+                      const implication = insight?.implication || ''
+                      const evidence = insight?.evidence || {}
+                      
+                      return (
+                        <div key={insight?.id || idx} className="card bg-brand-bg">
+                          <div className="flex items-start justify-between mb-2">
+                            <h3 className="font-semibold text-lg">{headline}</h3>
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              severity === 'critical' ? 'bg-red-100 text-red-800' :
+                              severity === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-blue-100 text-blue-800'
+                            }`}>
+                              {severity}
+                            </span>
                           </div>
-                        )}
-                        {implication && (
-                          <p className="text-brand-text mt-2 italic">{implication}</p>
-                        )}
-                      </div>
-                    )
-                  })}
+                          {detail && <p className="text-brand-text mb-2">{detail}</p>}
+                          {evidence && typeof evidence === 'object' && Object.keys(evidence).length > 0 && (
+                            <div className="mt-2 p-2 bg-brand-surface rounded text-sm">
+                              <p className="text-brand-muted text-xs mb-1">Evidence:</p>
+                              {evidence.metric && <p className="text-brand-text">Metric: {evidence.metric}</p>}
+                              {evidence.value !== undefined && evidence.value !== null && <p className="text-brand-text">Value: {evidence.value}</p>}
+                              {evidence.comparison && <p className="text-brand-text">Comparison: {evidence.comparison}</p>}
+                              {evidence.delta !== undefined && evidence.delta !== null && <p className="text-brand-text">Delta: {evidence.delta}</p>}
+                              {evidence.delta_percent !== undefined && evidence.delta_percent !== null && <p className="text-brand-text">Delta %: {evidence.delta_percent}%</p>}
+                            </div>
+                          )}
+                          {implication && (
+                            <p className="text-brand-text mt-2 italic">{implication}</p>
+                          )}
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="card bg-brand-bg">
+                      <p className="text-brand-muted">No insights available for this analysis.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
