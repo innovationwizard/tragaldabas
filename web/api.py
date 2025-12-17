@@ -677,6 +677,67 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             
             return model
         
+        # Upload output files to Supabase Storage before converting to dict
+        output_storage_paths = {}
+        if ctx.output and supabase:
+            print(f"📤 Uploading output files to Supabase Storage for job {job_id}", flush=True)
+            try:
+                # Upload text file
+                if ctx.output.text_file_path:
+                    text_path = Path(ctx.output.text_file_path)
+                    if text_path.exists():
+                        with open(text_path, 'rb') as f:
+                            text_content = f.read()
+                        storage_path_txt = f"{user_id}/{job_id}/outputs/{text_path.name}"
+                        supabase.storage.from_("uploads").upload(
+                            path=storage_path_txt,
+                            file=text_content,
+                            file_options={"content-type": "text/plain", "upsert": "true"}
+                        )
+                        output_storage_paths["text_file_storage_path"] = storage_path_txt
+                        print(f"✅ Uploaded text file to: {storage_path_txt}", flush=True)
+                
+                # Upload markdown file
+                if ctx.output.markdown_file_path:
+                    md_path = Path(ctx.output.markdown_file_path)
+                    if md_path.exists():
+                        with open(md_path, 'rb') as f:
+                            md_content = f.read()
+                        storage_path_md = f"{user_id}/{job_id}/outputs/{md_path.name}"
+                        supabase.storage.from_("uploads").upload(
+                            path=storage_path_md,
+                            file=md_content,
+                            file_options={"content-type": "text/markdown", "upsert": "true"}
+                        )
+                        output_storage_paths["markdown_file_storage_path"] = storage_path_md
+                        print(f"✅ Uploaded markdown file to: {storage_path_md}", flush=True)
+                
+                # Upload PowerPoint file
+                if ctx.output.pptx_file_path:
+                    pptx_path = Path(ctx.output.pptx_file_path)
+                    if pptx_path.exists():
+                        with open(pptx_path, 'rb') as f:
+                            pptx_content = f.read()
+                        storage_path_pptx = f"{user_id}/{job_id}/outputs/{pptx_path.name}"
+                        supabase.storage.from_("uploads").upload(
+                            path=storage_path_pptx,
+                            file=pptx_content,
+                            file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "upsert": "true"}
+                        )
+                        output_storage_paths["pptx_file_storage_path"] = storage_path_pptx
+                        print(f"✅ Uploaded PowerPoint file to: {storage_path_pptx}", flush=True)
+                
+            except Exception as e:
+                import traceback
+                print(f"⚠️ Warning: Failed to upload output files to Storage: {e}", flush=True)
+                print(traceback.format_exc(), flush=True)
+                # Don't fail the job if upload fails - files are still available locally
+        
+        # Convert output to dict and add storage paths
+        output_dict = to_dict(ctx.output)
+        if output_dict and output_storage_paths:
+            output_dict.update(output_storage_paths)
+        
         result = {
             "reception": to_dict(ctx.reception),
             "classification": to_dict(ctx.classification),
@@ -685,7 +746,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             "reconciliation": to_dict(ctx.reconciliation),
             "etl": to_dict(ctx.etl),
             "analysis": to_dict(ctx.analysis),
-            "output": to_dict(ctx.output),
+            "output": output_dict,
         }
         
         # Update job with completed status and result
