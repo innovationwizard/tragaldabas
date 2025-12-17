@@ -190,13 +190,16 @@ class WebUserPrompt:
         return Domain.FINANCIAL  # Default
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
     """Get current user from Supabase Auth"""
     if not supabase:
         raise HTTPException(
             status_code=500,
             detail="Supabase Auth not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
         )
+    
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authorization header required")
     
     token = credentials.credentials
     
