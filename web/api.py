@@ -584,6 +584,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             # Handle datetime objects - convert to ISO format string
             from datetime import datetime, date
             import math
+            import pandas as pd
+            import numpy as np
             if isinstance(model, (datetime, date)):
                 return model.isoformat()
             
@@ -596,14 +598,29 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
                 return model
             
             # Handle DataFrames - convert to serializable format
-            import pandas as pd
             if isinstance(model, pd.DataFrame):
-                # Convert DataFrame to dict with metadata
+                # Convert DataFrame sample to dict, handling NaN values
+                sample_data = []
+                if len(model) > 0:
+                    sample_df = model.head(10)
+                    # Convert to dict and replace NaN with None
+                    sample_dicts = sample_df.to_dict(orient='records')
+                    for row in sample_dicts:
+                        cleaned_row = {}
+                        for key, value in row.items():
+                            if pd.isna(value) or (isinstance(value, float) and math.isnan(value)):
+                                cleaned_row[key] = None
+                            elif isinstance(value, float) and math.isinf(value):
+                                cleaned_row[key] = "infinity" if value > 0 else "-infinity"
+                            else:
+                                cleaned_row[key] = to_dict(value)  # Recursively handle nested values
+                        sample_data.append(cleaned_row)
+                
                 return {
                     "_type": "DataFrame",
                     "shape": model.shape,
                     "columns": model.columns.tolist(),
-                    "sample": model.head(10).to_dict(orient='records') if len(model) > 0 else []
+                    "sample": sample_data
                 }
             
             # Handle dicts that might contain DataFrames, datetimes, or NaN values
