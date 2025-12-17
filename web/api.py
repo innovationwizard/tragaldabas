@@ -92,12 +92,19 @@ def get_job_from_db(job_id: str) -> Optional[Dict[str, Any]]:
 def update_job_in_db(job_id: str, updates: Dict[str, Any]):
     """Update job in Supabase database (synchronous)"""
     if not supabase:
-        return
+        print(f"⚠️ Supabase client not initialized, cannot update job {job_id}", flush=True)
+        return False
     try:
         updates["updated_at"] = datetime.utcnow().isoformat()
-        supabase.table("pipeline_jobs").update(updates).eq("id", job_id).execute()
+        print(f"💾 Updating job {job_id} with: {list(updates.keys())}", flush=True)
+        response = supabase.table("pipeline_jobs").update(updates).eq("id", job_id).execute()
+        print(f"✅ Job {job_id} updated successfully", flush=True)
+        return True
     except Exception as e:
-        print(f"Error updating job in DB: {e}")
+        print(f"❌ Error updating job {job_id} in DB: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        return False
 
 def create_job_in_db(job_data: Dict[str, Any]):
     """Create job in Supabase database (synchronous)"""
