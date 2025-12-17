@@ -158,8 +158,9 @@ const Pipeline = () => {
     <Layout>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <Link to="/dashboard" className="text-brand-muted hover:text-brand-primary mb-4 inline-block">
-            ← Back to Dashboard
+          <Link to="/dashboard" className="text-brand-muted hover:text-brand-primary mb-4 inline-flex items-center gap-1">
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
           </Link>
           <h1 className="text-3xl font-bold mb-2">Processing Pipeline</h1>
           <p className="text-brand-muted">{job?.filename}</p>
