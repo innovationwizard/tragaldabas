@@ -303,8 +303,7 @@ Respond with JSON:
         clean = self._clean_json_response(response)
         return json.loads(clean)
     
-    @staticmethod
-    def _clean_json_response(response: str) -> str:
+    def _clean_json_response(self, response: str) -> str:
         """Clean JSON response from markdown or extra text"""
         clean = response.strip()
         
