@@ -40,6 +40,12 @@ if SUPABASE_AVAILABLE and settings.SUPABASE_URL and settings.SUPABASE_SERVICE_RO
 
 security = HTTPBearer(auto_error=False)  # Don't auto-raise error, handle manually
 
+async def get_credentials_or_none(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> Optional[HTTPAuthorizationCredentials]:
+    """Dependency to get credentials or None"""
+    return credentials
+
 app = FastAPI(
     title="Tragaldabas API",
     description="Universal Data Ingestor API",
@@ -190,7 +196,7 @@ class WebUserPrompt:
         return Domain.FINANCIAL  # Default
 
 
-async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
+async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(get_credentials_or_none)) -> dict:
     """Get current user from Supabase Auth"""
     if not supabase:
         raise HTTPException(
@@ -198,8 +204,11 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             detail="Supabase Auth not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
         )
     
-    if not credentials:
+    if credentials is None:
         raise HTTPException(status_code=401, detail="Authorization header required")
+    
+    if not hasattr(credentials, 'credentials') or credentials.credentials is None:
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
     
     token = credentials.credentials
     
