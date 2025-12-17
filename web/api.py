@@ -369,39 +369,37 @@ async def upload_file(
     # Create job in database (synchronous call)
     create_job_in_db(job_data)
     
-    # Trigger Edge Function to process the job asynchronously
-    # This is more reliable than database triggers and works immediately
+    # Trigger Edge Function to process the job
+    # Note: We await this call (with short timeout) because asyncio.create_task()
+    # tasks are killed when Vercel serverless functions return
     edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
     
-    async def trigger_edge_function():
-        """Fire-and-forget call to Edge Function"""
-        try:
-            import httpx
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(
-                    edge_function_url,
-                    json={"job_id": job_id},
-                    headers={
-                        "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
-                        "Content-Type": "application/json"
-                    }
-                )
-                # Log response for debugging
-                if response.status_code != 200:
-                    error_text = await response.text()
-                    print(f"❌ Edge Function error ({response.status_code}): {error_text}")
-                else:
-                    print(f"✅ Edge Function called successfully for job {job_id}")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not trigger Edge Function: {e}")
-            import traceback
-            print(traceback.format_exc())
-    
-    # Fire and forget - don't wait for response
     try:
-        asyncio.create_task(trigger_edge_function())
+        import httpx
+        print(f"🚀 Triggering Edge Function for job {job_id}", flush=True)
+        async with httpx.AsyncClient(timeout=5.0) as client:  # Short timeout to avoid blocking
+            response = await client.post(
+                edge_function_url,
+                json={"job_id": job_id},
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                    "Content-Type": "application/json"
+                }
+            )
+            # Log response for debugging
+            if response.status_code != 200:
+                error_text = await response.text()
+                print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
+            else:
+                print(f"✅ Edge Function called successfully for job {job_id}", flush=True)
+    except httpx.TimeoutException:
+        # Timeout is OK - Edge Function will still process the job
+        print(f"⚠️ Edge Function call timed out (non-critical), job {job_id} will be processed", flush=True)
     except Exception as e:
-        print(f"Warning: Could not create task for Edge Function: {e}")
+        print(f"⚠️ Warning: Could not trigger Edge Function: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        # Don't fail the upload if Edge Function call fails - job can be processed manually later
     
     return {"job_id": job_id, "status": "pending", "message": "Job created, processing will start shortly"}
 
