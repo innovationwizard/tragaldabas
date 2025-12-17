@@ -251,12 +251,8 @@ class LLMClient:
         max_tokens: int,
         temperature: float
     ) -> str:
-        """Call Google Gemini API"""
+        """Call Google Gemini API - supports both new google.genai and old google.generativeai"""
         genai_client = self.providers[LLMProvider.GEMINI]
-        
-        # Use configured model or fallback
-        model_id = settings.GEMINI_MODEL_ID or settings.GEMINI_FALLBACK_MODEL_ID or "gemini-1.5-pro"
-        model = genai_client.GenerativeModel(model_id)
         
         full_prompt = prompt
         if system:
@@ -270,22 +266,24 @@ class LLMClient:
         model_id = settings.GEMINI_MODEL_ID or settings.GEMINI_FALLBACK_MODEL_ID or "gemini-1.5-pro"
         
         try:
-            model = genai_client.GenerativeModel(model_id)
-            response = await loop.run_in_executor(
-                None,
-                lambda: model.generate_content(
-                    full_prompt,
-                    generation_config=genai_client.types.GenerationConfig(
-                        max_output_tokens=max_tokens,
-                        temperature=temperature
+            # Check if using new google.genai API (has Client) or old google.generativeai API
+            if hasattr(genai_client, 'models') and hasattr(genai_client.models, 'generate_content'):
+                # New API: google.genai
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: genai_client.models.generate_content(
+                        model=model_id,
+                        contents=full_prompt,
+                        config={
+                            "max_output_tokens": max_tokens,
+                            "temperature": temperature
+                        }
                     )
                 )
-            )
-            return response.text
-        except Exception as e:
-            # If primary model fails and fallback is configured, try fallback
-            if settings.GEMINI_FALLBACK_MODEL_ID and model_id != settings.GEMINI_FALLBACK_MODEL_ID:
-                model = genai_client.GenerativeModel(settings.GEMINI_FALLBACK_MODEL_ID)
+                return response.text
+            else:
+                # Old API: google.generativeai
+                model = genai_client.GenerativeModel(model_id)
                 response = await loop.run_in_executor(
                     None,
                     lambda: model.generate_content(
@@ -297,6 +295,38 @@ class LLMClient:
                     )
                 )
                 return response.text
+        except Exception as e:
+            # If primary model fails and fallback is configured, try fallback
+            if settings.GEMINI_FALLBACK_MODEL_ID and model_id != settings.GEMINI_FALLBACK_MODEL_ID:
+                fallback_id = settings.GEMINI_FALLBACK_MODEL_ID
+                if hasattr(genai_client, 'models') and hasattr(genai_client.models, 'generate_content'):
+                    # New API: google.genai
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: genai_client.models.generate_content(
+                            model=fallback_id,
+                            contents=full_prompt,
+                            config={
+                                "max_output_tokens": max_tokens,
+                                "temperature": temperature
+                            }
+                        )
+                    )
+                    return response.text
+                else:
+                    # Old API: google.generativeai
+                    model = genai_client.GenerativeModel(fallback_id)
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: model.generate_content(
+                            full_prompt,
+                            generation_config=genai_client.types.GenerationConfig(
+                                max_output_tokens=max_tokens,
+                                temperature=temperature
+                            )
+                        )
+                    )
+                    return response.text
             raise
     
     def _default_system_prompt(self) -> str:
