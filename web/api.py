@@ -563,7 +563,7 @@ async def process_job(
     # Get file path from job metadata or reconstruct it
     # Note: In Vercel, files are ephemeral, so we need to store them in Supabase Storage
     # For now, assume file_path is stored in job metadata or reconstruct from job_id
-    from config import settings
+    # settings is already imported at module level
     output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
     file_path = Path(output_dir) / "uploads" / job_id / job.get("filename")
     
