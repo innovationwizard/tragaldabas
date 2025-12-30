@@ -67,7 +67,7 @@ const Results = () => {
     { id: 'classification', name: 'Classification' },
     { id: 'structure', name: 'Structure' },
     { id: 'analysis', name: 'Analysis' },
-    { id: 'output', name: 'Output' },
+    { id: 'output', name: 'Deliverables' },
   ]
 
   return (
@@ -152,7 +152,7 @@ const Results = () => {
 
             {activeTab === 'analysis' && result.analysis && (
               <div>
-                <h2 className="text-2xl font-semibold mb-4">Analysis & Insights</h2>
+                <h2 className="text-2xl font-semibold mb-4">Analysis</h2>
                 {result.analysis.domain && (
                   <div className="mb-4">
                     <span className="text-brand-muted">Domain: </span>
@@ -236,7 +236,7 @@ const Results = () => {
 
             {activeTab === 'output' && result.output && (
               <div>
-                <h2 className="text-2xl font-semibold mb-4">Output Files</h2>
+                <h2 className="text-2xl font-semibold mb-4">Deliverables</h2>
                 <div className="space-y-4">
                   {result.output.pptx_file_path && (
                     <div className="card bg-brand-bg">
