@@ -123,7 +123,7 @@ const Results = () => {
 
             {activeTab === 'classification' && result.classification && (
               <div>
-                <h2 className="text-2xl font-semibold mb-4">Content Classification</h2>
+                <h2 className="text-2xl font-semibold mb-4">Classification</h2>
                 <div className="space-y-4">
                   <div>
                     <h3 className="font-semibold mb-2">Primary Type</h3>
