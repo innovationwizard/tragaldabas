@@ -33,7 +33,7 @@ const Login = () => {
           <div className="text-center mb-8">
             <img src="/tragaldabas-logo.svg" alt="Logo" className="h-16 w-16 mx-auto mb-4" />
             <h1 className="text-3xl font-bold mb-2">Sign In</h1>
-            <p className="text-brand-muted">Welcome back to Tragaldabas</p>
+            <p className="text-brand-muted">Feed the Tragaldabas</p>
           </div>
 
           {error && (
