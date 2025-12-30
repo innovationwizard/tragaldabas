@@ -115,7 +115,7 @@ const Results = () => {
                   </div>
                   <div className="card bg-brand-bg">
                     <h3 className="font-semibold mb-2">Status</h3>
-                    <p className="text-brand-primary">Completed</p>
+                    <p className="text-brand-primary">Digested</p>
                   </div>
                 </div>
               </div>
