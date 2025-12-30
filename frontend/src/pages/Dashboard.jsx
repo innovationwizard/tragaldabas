@@ -47,6 +47,10 @@ const Dashboard = () => {
     }
   }
 
+  const formatStatus = (status) => {
+    return status === 'completed' ? 'digested' : status
+  }
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -85,7 +89,7 @@ const Dashboard = () => {
                   </div>
                   <div className="text-right">
                     <span className={`font-medium ${getStatusColor(job.status)}`}>
-                      {job.status}
+                      {formatStatus(job.status)}
                     </span>
                   </div>
                 </div>
