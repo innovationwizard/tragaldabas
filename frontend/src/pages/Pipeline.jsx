@@ -12,7 +12,7 @@ const STAGES = [
   { num: 3, name: 'Dissolving', description: 'Permutating data boundaries' },
   { num: 4, name: 'Transmogrifying', description: 'Amalgamating multi-structure datasets' },
   { num: 5, name: 'Transmuting', description: 'Reprofiling schemas and transforming data' },
-  { num: 6, name: 'Analysis', description: 'Generating insights' },
+  { num: 6, name: 'Exsiccating', description: 'Abstracting insights' },
   { num: 7, name: 'Output', description: 'Creating presentations and summaries' },
 ]
 
