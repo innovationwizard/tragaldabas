@@ -107,7 +107,7 @@ const Results = () => {
                 <h2 className="text-2xl font-semibold mb-4">Pipeline Overview</h2>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="card bg-brand-bg">
-                    <h3 className="font-semibold mb-2">File Information</h3>
+                    <h3 className="font-semibold mb-2">File</h3>
                     <p className="text-brand-muted text-sm">Filename: {job.filename}</p>
                     <p className="text-brand-muted text-sm">
                       Processed: {new Date(job.created_at).toLocaleString()}
