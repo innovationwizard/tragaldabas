@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react'
 import Layout from '../components/Layout'
 
 const STAGES = [
-  { num: 0, name: 'Reception', description: 'Validating and parsing file' },
+  { num: 0, name: 'Snatching', description: 'Parsing file' },
   { num: 1, name: 'Classification', description: 'Detecting content type and domain' },
   { num: 2, name: 'Structure Inference', description: 'Analyzing data structure' },
   { num: 3, name: 'Data Archaeology', description: 'Finding data boundaries' },
@@ -105,7 +105,7 @@ const Pipeline = () => {
           name: jobData.current_stage_name || STAGES[jobData.current_stage]?.name || 'Processing' 
         })
       } else {
-        setCurrentStage({ num: 0, name: 'Reception' })
+        setCurrentStage({ num: 0, name: 'Snatching' })
       }
     }
   }
