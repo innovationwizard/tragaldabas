@@ -143,7 +143,7 @@ const Results = () => {
 
             {activeTab === 'structure' && result.structure && (
               <div>
-                <h2 className="text-2xl font-semibold mb-4">Data Structure</h2>
+                <h2 className="text-2xl font-semibold mb-4">Structure</h2>
                 <pre className="bg-brand-bg p-4 rounded-lg overflow-auto text-sm">
                   {JSON.stringify(result.structure, null, 2)}
                 </pre>
