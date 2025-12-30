@@ -9,7 +9,7 @@ const STAGES = [
   { num: 0, name: 'Snatching', description: 'Parsing file' },
   { num: 1, name: 'Mauling', description: 'Discerning content type and domain' },
   { num: 2, name: 'Shredding', description: 'Atomizing data structures' },
-  { num: 3, name: 'Data Archaeology', description: 'Finding data boundaries' },
+  { num: 3, name: 'Dissolving', description: 'Permutating data boundaries' },
   { num: 4, name: 'Reconciliation', description: 'Unifying multi-sheet files' },
   { num: 5, name: 'Schema & ETL', description: 'Designing schema and transforming data' },
   { num: 6, name: 'Analysis', description: 'Generating insights' },
