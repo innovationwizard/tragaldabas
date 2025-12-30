@@ -115,7 +115,7 @@ const Upload = () => {
               disabled={!file || uploading}
               className="btn-primary w-full"
             >
-              {uploading ? 'Uploading...' : 'Start Processing'}
+              {uploading ? 'Uploading...' : 'Placate his hunger'}
             </button>
           </form>
         </div>
