@@ -61,7 +61,7 @@ const Upload = () => {
   return (
     <Layout>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold mb-8">Upload File</h1>
+        <h1 className="text-3xl font-bold mb-8">Feed the Tragaldabas</h1>
 
         <div className="card">
           {error && (
