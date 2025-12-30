@@ -104,7 +104,7 @@ const Results = () => {
           <div className="space-y-6">
             {activeTab === 'overview' && (
               <div>
-                <h2 className="text-2xl font-semibold mb-4">Pipeline Overview</h2>
+                <h2 className="text-2xl font-semibold mb-4">Overview</h2>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="card bg-brand-bg">
                     <h3 className="font-semibold mb-2">File</h3>
