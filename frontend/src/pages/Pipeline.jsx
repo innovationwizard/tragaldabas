@@ -7,7 +7,7 @@ import Layout from '../components/Layout'
 
 const STAGES = [
   { num: 0, name: 'Snatching', description: 'Parsing file' },
-  { num: 1, name: 'Classification', description: 'Detecting content type and domain' },
+  { num: 1, name: 'Mauling', description: 'Discerning content type and domain' },
   { num: 2, name: 'Structure Inference', description: 'Analyzing data structure' },
   { num: 3, name: 'Data Archaeology', description: 'Finding data boundaries' },
   { num: 4, name: 'Reconciliation', description: 'Unifying multi-sheet files' },
