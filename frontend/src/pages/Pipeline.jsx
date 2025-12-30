@@ -13,7 +13,7 @@ const STAGES = [
   { num: 4, name: 'Transmogrifying', description: 'Amalgamating multi-structure datasets' },
   { num: 5, name: 'Transmuting', description: 'Reprofiling schemas and transforming data' },
   { num: 6, name: 'Exsiccating', description: 'Abstracting insights' },
-  { num: 7, name: 'Output', description: 'Creating presentations and summaries' },
+  { num: 7, name: 'Excreting elixir', description: 'Materializing posterior deliverables' },
 ]
 
 const Pipeline = () => {
@@ -96,7 +96,7 @@ const Pipeline = () => {
 
   const updateCurrentStage = (jobData) => {
     if (jobData.status === 'completed') {
-      setCurrentStage({ num: 7, name: 'Output' })
+      setCurrentStage({ num: 7, name: 'Excreting elixir' })
     } else if (jobData.status === 'running') {
       // Use current_stage from job data if available
       if (jobData.current_stage !== null && jobData.current_stage !== undefined) {
