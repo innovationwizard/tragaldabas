@@ -53,7 +53,7 @@ const Dashboard = () => {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Menu</h1>
           <Link to="/upload" className="btn-primary">
-            Upload File
+            Feed the Tragaldabas
           </Link>
         </div>
 
