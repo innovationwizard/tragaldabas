@@ -24,7 +24,7 @@ const Layout = ({ children }) => {
             {user && (
               <div className="flex items-center space-x-4">
                 <Link to="/dashboard" className="text-brand-text hover:text-brand-primary">
-                  Dashboard
+                  Menu
                 </Link>
                 <Link to="/upload" className="text-brand-text hover:text-brand-primary">
                   Upload

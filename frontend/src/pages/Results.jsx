@@ -76,7 +76,7 @@ const Results = () => {
         <div className="mb-8">
           <Link to="/dashboard" className="text-brand-muted hover:text-brand-primary mb-4 inline-flex items-center gap-1">
             <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
+            Back to Menu
           </Link>
           <h1 className="text-3xl font-bold mb-2">Results</h1>
           <p className="text-brand-muted">{job.filename}</p>
