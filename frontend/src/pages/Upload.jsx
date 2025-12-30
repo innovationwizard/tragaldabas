@@ -103,9 +103,9 @@ const Upload = () => {
                   <span className="text-brand-text font-medium">
                     {file ? file.name : 'Click to select file'}
                   </span>
-                  <span className="text-brand-muted text-sm mt-2">
+                  {/* <span className="text-brand-muted text-sm mt-2">
                     Excel, CSV, or Word documents
-                  </span>
+                  </span> */}
                 </label>
               </div>
             </div>
