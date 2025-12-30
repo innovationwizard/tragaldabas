@@ -27,7 +27,7 @@ const Layout = ({ children }) => {
                   Menu
                 </Link>
                 <Link to="/upload" className="text-brand-text hover:text-brand-primary">
-                  Upload
+                  Feed me
                 </Link>
                 <div className="flex items-center space-x-3">
                   <span className="text-brand-muted text-sm">{user.email || user.user_metadata?.email}</span>
