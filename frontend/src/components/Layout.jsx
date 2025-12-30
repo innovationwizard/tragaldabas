@@ -35,7 +35,7 @@ const Layout = ({ children }) => {
                     onClick={handleLogout}
                     className="btn-secondary text-sm"
                   >
-                    Logout
+                    Exit
                   </button>
                 </div>
               </div>
