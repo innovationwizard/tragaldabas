@@ -285,7 +285,7 @@ const Results = () => {
                     <div className="card bg-brand-bg">
                       <h3 className="font-semibold mb-2">Text Summary</h3>
                       <p className="text-brand-muted text-sm mb-2">
-                        Text insights file
+                        Text file generated
                       </p>
                       <button
                         onClick={async () => {
