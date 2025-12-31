@@ -14,6 +14,7 @@ const Landing = () => {
           <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-brand-primary to-amber-600 bg-clip-text text-transparent">
             Tragaldabas
           </h1>
+          
           <p className="text-xl text-brand-muted mb-2">Universal Data Ingestor</p>
           <p className="text-lg text-brand-text max-w-2xl mx-auto mb-12">
             Transform raw files into actionable business intelligence.
