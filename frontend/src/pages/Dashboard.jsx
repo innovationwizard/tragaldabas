@@ -48,7 +48,7 @@ const Dashboard = () => {
   }
 
   const formatStatus = (status) => {
-    return status === 'completed' ? 'digested' : status
+    return status === 'completed' ? 'Digested' : status
   }
 
   return (
