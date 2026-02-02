@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 import os
 from datetime import datetime
+import re
 import logging
 
 try:
@@ -426,7 +427,8 @@ async def get_current_user_info(user: dict = Depends(get_current_user)):
 # Pipeline endpoints
 @app.post("/api/pipeline/upload")
 async def upload_file(
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(None),
+    file: UploadFile = File(None),
     app_generation: bool = Form(False),
     user: dict = Depends(get_current_user)
 ):
@@ -435,88 +437,104 @@ async def upload_file(
     from config import settings
     import tempfile
     
-    job_id = str(uuid.uuid4())
     user_id = user.get("id")
+
+    upload_files = files or ([] if file is None else [file])
+    if not upload_files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    job_ids: List[str] = []
     
     # Upload file to Supabase Storage (persistent, accessible from Railway worker)
     # Files in Vercel /tmp are ephemeral and not accessible from Railway
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase client not initialized")
+
+    for upload_file in upload_files:
+        job_id = str(uuid.uuid4())
+        try:
+            content = await upload_file.read()
+
+            storage_path = f"{user_id}/{job_id}/{upload_file.filename}"
+            response = supabase.storage.from_("uploads").upload(
+                path=storage_path,
+                file=content,
+                file_options={"content-type": upload_file.content_type or "application/octet-stream", "upsert": "true"}
+            )
+
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Supabase Storage upload error: {response.error}")
+
+            print(f"✅ File uploaded to Supabase Storage: {storage_path}", flush=True)
+        except Exception as e:
+            import traceback
+            print(f"❌ Error uploading file to Supabase Storage: {e}", flush=True)
+            print(traceback.format_exc(), flush=True)
+            raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+
+        is_excel = bool(re.search(r"\.(xlsx|xls)$", upload_file.filename, re.IGNORECASE))
+        job_data = {
+            "id": job_id,
+            "user_id": user_id,
+            "filename": upload_file.filename,
+            "status": "pending",
+            "current_stage": None,
+            "current_stage_name": None,
+            "completed_stages": [],
+            "questions": [],
+            "storage_path": storage_path,
+            "app_generation": bool(app_generation and is_excel),
+        }
+
+        create_job_in_db(job_data)
+        job_ids.append(job_id)
     
-    try:
-        # Read file content
-        content = await file.read()
-        
-        # Upload to Supabase Storage bucket "uploads"
-        storage_path = f"{user_id}/{job_id}/{file.filename}"
-        response = supabase.storage.from_("uploads").upload(
-            path=storage_path,
-            file=content,
-            file_options={"content-type": file.content_type or "application/octet-stream", "upsert": "true"}
-        )
-        
-        # Check for upload errors
-        if hasattr(response, 'error') and response.error:
-            raise Exception(f"Supabase Storage upload error: {response.error}")
-        
-        print(f"✅ File uploaded to Supabase Storage: {storage_path}", flush=True)
-        
-    except Exception as e:
-        import traceback
-        print(f"❌ Error uploading file to Supabase Storage: {e}", flush=True)
-        print(traceback.format_exc(), flush=True)
-        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
-    
-    # Initialize job in Supabase database
-    job_data = {
-        "id": job_id,
-        "user_id": user_id,
-        "filename": file.filename,
-        "status": "pending",
-        "current_stage": None,
-        "current_stage_name": None,
-        "completed_stages": [],
-        "questions": [],
-        "storage_path": storage_path,  # Store the storage path for later retrieval
-        "app_generation": bool(app_generation),
-    }
-    
-    # Create job in database (synchronous call)
-    create_job_in_db(job_data)
-    
-    # Trigger Edge Function to process the job
+    # Trigger Edge Function to process the job(s)
     # Note: We await this call (with short timeout) because asyncio.create_task()
     # tasks are killed when Vercel serverless functions return
     edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
     
     try:
         import httpx
-        print(f"🚀 Triggering Edge Function for job {job_id}", flush=True)
+        print(f"🚀 Triggering Edge Function for {len(job_ids)} job(s)", flush=True)
         async with httpx.AsyncClient(timeout=5.0) as client:  # Short timeout to avoid blocking
-            response = await client.post(
-                edge_function_url,
-                json={"job_id": job_id},
-                headers={
-                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
-                    "Content-Type": "application/json"
-                }
-            )
-            # Log response for debugging
-            if response.status_code != 200:
-                error_text = await response.text()
-                print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
-            else:
-                print(f"✅ Edge Function called successfully for job {job_id}", flush=True)
+            tasks = []
+            for created_job_id in job_ids:
+                tasks.append(client.post(
+                    edge_function_url,
+                    json={"job_id": created_job_id},
+                    headers={
+                        "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                ))
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
+            for created_job_id, response in zip(job_ids, responses):
+                if isinstance(response, Exception):
+                    print(f"❌ Edge Function error: {response}", flush=True)
+                    continue
+                if response.status_code != 200:
+                    error_text = await response.text()
+                    print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
+                else:
+                    print(f"✅ Edge Function called successfully for job {created_job_id}", flush=True)
     except httpx.TimeoutException:
         # Timeout is OK - Edge Function will still process the job
-        print(f"⚠️ Edge Function call timed out (non-critical), job {job_id} will be processed", flush=True)
+        print("⚠️ Edge Function call timed out (non-critical), jobs will be processed", flush=True)
     except Exception as e:
         print(f"⚠️ Warning: Could not trigger Edge Function: {e}", flush=True)
         import traceback
         print(traceback.format_exc(), flush=True)
         # Don't fail the upload if Edge Function call fails - job can be processed manually later
     
-    return {"job_id": job_id, "status": "pending", "message": "Job created, processing will start shortly"}
+    response_payload = {
+        "job_ids": job_ids,
+        "status": "pending",
+        "message": "Jobs created, processing will start shortly"
+    }
+    if len(job_ids) == 1:
+        response_payload["job_id"] = job_ids[0]
+    return response_payload
 
 
 @app.post("/api/pipeline/jobs/{job_id}/retry")

@@ -4,40 +4,59 @@ import axios from 'axios'
 import Layout from '../components/Layout'
 
 const Upload = () => {
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [generateApp, setGenerateApp] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
   const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0]
-    if (selectedFile) {
-      // Validate file type
-      const validTypes = [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-excel',
-        'text/csv',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      ]
-      
-      if (!validTypes.includes(selectedFile.type) && !selectedFile.name.match(/\.(xlsx|xls|csv|docx)$/i)) {
-        setError('Invalid file type. Please upload Excel, CSV, or Word documents.')
-        return
-      }
-      
-      const isExcel = selectedFile.name.match(/\.(xlsx|xls)$/i)
-      if (!isExcel) {
-        setGenerateApp(false)
-      }
-      setFile(selectedFile)
-      setError('')
+    const selectedFiles = Array.from(e.target.files || [])
+    if (!selectedFiles.length) {
+      setFiles([])
+      return
     }
+
+    const validTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ]
+
+    const invalid = selectedFiles.find((item) => (
+      !validTypes.includes(item.type) && !item.name.match(/\.(xlsx|xls|csv|docx)$/i)
+    ))
+
+    if (invalid) {
+      setError('Invalid file type. Please upload Excel, CSV, or Word documents.')
+      return
+    }
+
+    const hasNonExcel = selectedFiles.some((item) => !item.name.match(/\.(xlsx|xls)$/i))
+    if (hasNonExcel) {
+      setGenerateApp(false)
+    }
+
+    setFiles(selectedFiles)
+    setError('')
+  }
+
+  const moveFile = (index, direction) => {
+    setFiles((prev) => {
+      const next = [...prev]
+      const target = index + direction
+      if (target < 0 || target >= next.length) {
+        return prev
+      }
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    })
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!file) {
+    if (!files.length) {
       setError('Please select a file')
       return
     }
@@ -47,9 +66,11 @@ const Upload = () => {
 
     try {
       const formData = new FormData()
-      const isExcel = file.name.match(/\.(xlsx|xls)$/i)
-      formData.append('file', file)
-      formData.append('app_generation', Boolean(generateApp && isExcel))
+      const hasExcel = files.some((item) => item.name.match(/\.(xlsx|xls)$/i))
+      files.forEach((item) => {
+        formData.append('files', item)
+      })
+      formData.append('app_generation', Boolean(generateApp && hasExcel))
 
       const response = await axios.post('/api/pipeline/upload', formData, {
         headers: {
@@ -57,7 +78,11 @@ const Upload = () => {
         },
       })
 
-      navigate(`/pipeline/${response.data.job_id}`)
+      if (response.data.job_ids && response.data.job_ids.length > 1) {
+        navigate('/dashboard')
+      } else {
+        navigate(`/pipeline/${response.data.job_id}`)
+      }
     } catch (err) {
       setError(err.message || err.response?.data?.detail || 'Upload failed')
     } finally {
@@ -80,13 +105,14 @@ const Upload = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium mb-2">
-                Select File
+                Select File(s)
               </label>
               <div className="border-2 border-dashed border-brand-border rounded-lg p-8 text-center">
                 <input
                   type="file"
                   onChange={handleFileChange}
                   accept=".xlsx,.xls,.csv,.docx"
+                  multiple
                   className="hidden"
                   id="file-input"
                 />
@@ -108,7 +134,7 @@ const Upload = () => {
                     />
                   </svg>
                   <span className="text-brand-text font-medium">
-                    {file ? file.name : 'Click to select file'}
+                    {files.length ? `${files.length} file(s) selected` : 'Click to select file(s)'}
                   </span>
                   {/* <span className="text-brand-muted text-sm mt-2">
                     Excel, CSV, or Word documents
@@ -117,7 +143,7 @@ const Upload = () => {
               </div>
             </div>
 
-            {file && file.name.match(/\.(xlsx|xls)$/i) && (
+            {files.length > 0 && files.every((item) => item.name.match(/\.(xlsx|xls)$/i)) && (
               <label className="flex items-center gap-3 text-sm text-brand-muted">
                 <input
                   type="checkbox"
@@ -125,13 +151,49 @@ const Upload = () => {
                   onChange={(e) => setGenerateApp(e.target.checked)}
                   className="h-4 w-4 rounded border-brand-border bg-transparent text-brand-accent focus:ring-brand-accent"
                 />
-                Generate a web app from this Excel file
+                Generate a web app from these Excel files
               </label>
+            )}
+
+            {files.length > 1 && (
+              <div className="border border-brand-border rounded-lg p-4 bg-brand-bg">
+                <h3 className="font-semibold mb-2">Order files</h3>
+                <p className="text-brand-muted text-sm mb-3">
+                  Arrange files to hint at dependencies.
+                </p>
+                <div className="space-y-2">
+                  {files.map((item, idx) => (
+                    <div key={`${item.name}-${idx}`} className="flex items-center justify-between gap-3">
+                      <div className="text-sm text-brand-text">
+                        {idx + 1}. {item.name}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs px-2 py-1"
+                          onClick={() => moveFile(idx, -1)}
+                          disabled={idx === 0}
+                        >
+                          Up
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs px-2 py-1"
+                          onClick={() => moveFile(idx, 1)}
+                          disabled={idx === files.length - 1}
+                        >
+                          Down
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             <button
               type="submit"
-              disabled={!file || uploading}
+              disabled={!files.length || uploading}
               className="btn-primary w-full"
             >
               {uploading ? 'Salivating...' : 'Placate his hunger'}

@@ -254,38 +254,48 @@ async def get_current_user_info(user: dict = Depends(get_current_user)):
 # Pipeline endpoints (same as before, but using Supabase Auth user)
 @app.post("/api/pipeline/upload")
 async def upload_file(
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(None),
+    file: UploadFile = File(None),
     user: dict = Depends(get_current_user)
 ):
     """Upload file and start pipeline"""
     from config import settings
     
-    job_id = str(uuid.uuid4())
     user_id = user.get("id")
+
+    upload_files = files or ([] if file is None else [file])
+    if not upload_files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    job_ids: List[str] = []
     
-    # Save uploaded file
-    upload_dir = Path(settings.OUTPUT_DIR) / "uploads" / job_id
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / file.filename
+    for upload_file in upload_files:
+        job_id = str(uuid.uuid4())
+
+        upload_dir = Path(settings.OUTPUT_DIR) / "uploads" / job_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        file_path = upload_dir / upload_file.filename
+        
+        with open(file_path, "wb") as f:
+            content = await upload_file.read()
+            f.write(content)
+        
+        pipeline_jobs[job_id] = {
+            "id": job_id,
+            "user_id": user_id,
+            "filename": upload_file.filename,
+            "status": "pending",
+            "created_at": datetime.utcnow().isoformat(),
+            "questions": []
+        }
+        
+        asyncio.create_task(run_pipeline(job_id, str(file_path), user_id))
+        job_ids.append(job_id)
     
-    with open(file_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
-    
-    # Initialize job
-    pipeline_jobs[job_id] = {
-        "id": job_id,
-        "user_id": user_id,
-        "filename": file.filename,
-        "status": "pending",
-        "created_at": datetime.utcnow().isoformat(),
-        "questions": []
-    }
-    
-    # Start pipeline asynchronously
-    asyncio.create_task(run_pipeline(job_id, str(file_path), user_id))
-    
-    return {"job_id": job_id, "status": "started"}
+    response_payload = {"job_ids": job_ids, "status": "started"}
+    if len(job_ids) == 1:
+        response_payload["job_id"] = job_ids[0]
+    return response_payload
 
 
 async def run_pipeline(job_id: str, file_path: str, user_id: str):
