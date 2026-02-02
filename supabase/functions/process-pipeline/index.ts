@@ -5,7 +5,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const VERCEL_API_URL = Deno.env.get('VERCEL_API_URL') || 'https://tragaldabas.vercel.app'
-const WORKER_URL = Deno.env.get('WORKER_URL') || '' // Optional: Railway/Render worker URL
+const WORKER_URL = Deno.env.get('WORKER_URL') || '' // Optional: Railway worker URL
 
 serve(async (req) => {
   try {

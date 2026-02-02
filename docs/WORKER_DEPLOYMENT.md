@@ -60,38 +60,6 @@ WORKER_URL=https://tragaldabas-worker.up.railway.app
 
 Upload a file through the web app. The Edge Function should now call the Railway worker for processing.
 
-## Alternative: Render
-
-### 1. Create Account
-
-Go to [render.com](https://render.com) and sign up
-
-### 2. New Web Service
-
-1. Click "New +" → "Web Service"
-2. Connect your GitHub repository
-3. Select the `tragaldabas` repository
-
-### 4. Configure Service
-
-- **Name**: `tragaldabas-worker`
-- **Environment**: `Python 3`
-- **Build Command**: `pip install -r requirements-full.txt`
-- **Start Command**: `python worker.py`
-- **Plan**: Free or Starter
-
-### 5. Environment Variables
-
-Add the same environment variables as Railway (see step 4 above)
-
-### 6. Deploy
-
-Click "Create Web Service" - Render will deploy automatically
-
-### 7. Update Edge Function
-
-Add `WORKER_URL` secret pointing to your Render service URL
-
 ## Health Check
 
 Test the worker is running:
@@ -117,7 +85,7 @@ Should return:
 
 ### Pipeline fails with missing dependencies
 - Ensure `requirements-full.txt` is being used
-- Check Railway/Render logs for installation errors
+- Check Railway logs for installation errors
 
 ### Edge Function can't reach worker
 - Verify `WORKER_URL` is set in Edge Function secrets
@@ -133,7 +101,7 @@ Vercel API (creates job, status: pending)
     ↓
 Supabase Edge Function (triggered automatically)
     ↓
-Railway/Render Worker (processes pipeline)
+Railway Worker (processes pipeline)
     ↓
 Updates job status in Supabase DB
     ↓
@@ -147,9 +115,5 @@ Frontend polls for updates
 - Hobby: $5/month (after free tier)
 - Pro: $20/month
 
-**Render**:
-- Free tier: Limited hours
-- Starter: $7/month
-
-Both are suitable for development and small-scale production.
+Suitable for development and small-scale production.
 

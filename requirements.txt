@@ -1,5 +1,5 @@
 # Minimal requirements for Vercel API deployment
-# Heavy pipeline processing is handled by the worker service (Railway/Render)
+# Heavy pipeline processing is handled by the worker service (Railway)
 
 # Web framework (required)
 fastapi>=0.104.0

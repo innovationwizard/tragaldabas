@@ -223,7 +223,7 @@ After setting environment variables, verify they're loaded:
 
 - Vercel's `/tmp` is ephemeral
 - Use external storage (S3, Cloud Storage) or database
-- Consider deploying backend separately (Railway/Render)
+- Consider deploying backend separately (Railway)
 
 ## Quick Setup Checklist
 

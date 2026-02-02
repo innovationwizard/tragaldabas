@@ -1,0 +1,1160 @@
+Excel → Web App Generator: Technical Architecture
+
+System Overview
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         EXCEL → WEB APP PIPELINE                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
+│  │   Stage 8   │    │   Stage 9   │    │  Stage 10   │    │  Stage 11   │  │
+│  │    Cell     │───▶│ Dependency  │───▶│   Logic     │───▶│    Code     │  │
+│  │Classification│    │   Graph     │    │ Extraction  │    │ Generation  │  │
+│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘  │
+│                                                                    │        │
+│                                                                    ▼        │
+│                                                           ┌─────────────┐   │
+│                                                           │  Stage 12   │   │
+│                                                           │  Scaffold   │   │
+│                                                           │ & Deploy    │   │
+│                                                           └─────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Stage 8: Cell Classification
+Purpose
+Categorize every cell in the workbook by its functional role.
+Cell Taxonomy
+typescriptenum CellRole {
+  INPUT = "input",           // User-editable, feeds formulas
+  FORMULA = "formula",       // Contains calculation
+  OUTPUT = "output",         // Formula result, not referenced elsewhere
+  INTERMEDIATE = "intermediate", // Formula referenced by other formulas
+  STATIC = "static",         // Constant, not referenced
+  LABEL = "label",           // Descriptive text
+  STRUCTURAL = "structural", // Headers, section dividers
+}
+
+enum InputType {
+  TEXT = "text",
+  NUMBER = "number",
+  DATE = "date",
+  BOOLEAN = "boolean",
+  CURRENCY = "currency",
+  PERCENTAGE = "percentage",
+  ENUM = "enum",             // Data validation list
+}
+```
+
+### Classification Logic
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CELL CLASSIFICATION FLOW                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Cell has formula?                                              │
+│       │                                                         │
+│       ├── YES ──▶ Referenced by other formulas?                 │
+│       │               │                                         │
+│       │               ├── YES ──▶ INTERMEDIATE                  │
+│       │               └── NO  ──▶ OUTPUT                        │
+│       │                                                         │
+│       └── NO ──▶ Referenced by formulas?                        │
+│                       │                                         │
+│                       ├── YES ──▶ Has data validation?          │
+│                       │               │                         │
+│                       │               ├── YES ──▶ INPUT (typed) │
+│                       │               └── NO  ──▶ INPUT (infer) │
+│                       │                                         │
+│                       └── NO ──▶ Adjacent to INPUT/OUTPUT?      │
+│                                       │                         │
+│                                       ├── YES ──▶ LABEL         │
+│                                       └── NO  ──▶ STATIC        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Data Validation Extraction
+
+| Excel Validation | Mapped Input Type |
+|------------------|-------------------|
+| List | `enum` with options array |
+| Whole number | `number` with min/max |
+| Decimal | `number` with precision |
+| Date | `date` with range constraints |
+| Text length | `text` with maxLength |
+| Custom formula | Business rule → validation function |
+
+### VBA Macro Analysis
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      VBA EXTRACTION FLOW                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Extract VBA modules via oletools/openpyxl                   │
+│  2. Parse with regex + AST for:                                 │
+│     - Worksheet_Change events → input triggers                  │
+│     - Cell assignments → additional outputs                     │
+│     - Conditional logic → business rules                        │
+│  3. LLM semantic analysis:                                      │
+│     - What does this macro do?                                  │
+│     - Map to equivalent TypeScript function                     │
+│  4. Flag unsupported patterns (COM objects, external calls)     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+Output: CellClassificationResult
+typescriptinterface CellClassificationResult {
+  sheets: SheetClassification[];
+  namedRanges: NamedRange[];
+  vbaMacros: VBAMacro[];
+  dataValidations: DataValidation[];
+  conditionalFormats: ConditionalFormat[];
+  pivotTables: PivotTableDefinition[];
+}
+
+interface SheetClassification {
+  name: string;
+  cells: ClassifiedCell[];
+  inputGroups: InputGroup[];      // Logically related inputs
+  outputGroups: OutputGroup[];    // Logically related outputs
+  sections: SheetSection[];       // Structural divisions
+}
+
+interface ClassifiedCell {
+  address: string;                // "A1", "Sheet2!B5"
+  role: CellRole;
+  inputType?: InputType;
+  label?: string;                 // Inferred or adjacent label
+  formula?: string;               // Raw Excel formula
+  value?: any;                    // Current value (for type inference)
+  validation?: DataValidation;
+  formatting?: CellFormatting;    // For conditional format rules
+  referencedBy: string[];         // Cells that reference this
+  references: string[];           // Cells this references
+}
+
+Stage 9: Dependency Graph Construction
+Purpose
+Build complete calculation dependency graph with execution order.
+Graph Structure
+typescriptinterface DependencyGraph {
+  nodes: Map<string, GraphNode>;
+  edges: Edge[];
+  executionOrder: string[];       // Topological sort
+  clusters: CalculationCluster[]; // Independent subgraphs
+  circularRefs: CircularRef[];    // Error or iterative calc
+}
+
+interface GraphNode {
+  address: string;
+  role: CellRole;
+  formula?: ParsedFormula;
+  inDegree: number;               // Number of inputs
+  outDegree: number;              // Number of dependents
+  depth: number;                  // Distance from inputs
+  cluster: string;                // Which calculation cluster
+}
+
+interface Edge {
+  from: string;                   // Source cell
+  to: string;                     // Target cell
+  type: "direct" | "range" | "named" | "cross_sheet";
+}
+
+interface CalculationCluster {
+  id: string;
+  inputs: string[];
+  outputs: string[];
+  intermediates: string[];
+  semanticPurpose?: string;       // LLM-inferred: "Tax calculation"
+}
+```
+
+### Cross-Sheet Resolution
+```
+Sheet1!A1 ──────────────┐
+                        │
+Sheet2!B5 ──► =Sheet1!A1 + Sheet2!C3
+                        │
+Sheet2!C3 ──────────────┘
+All references normalized to fully-qualified addresses.
+Named Range Resolution
+typescript// Excel: =SUM(SalesData)
+// Where SalesData = Sheet1!A1:A100
+
+// Resolved to:
+{
+  formula: "=SUM(Sheet1!A1:A100)",
+  namedRangeRef: "SalesData",
+  expandedReferences: ["Sheet1!A1", "Sheet1!A2", ..., "Sheet1!A100"]
+}
+Circular Reference Handling
+typescriptinterface CircularRef {
+  cycle: string[];                // ["A1", "B1", "C1", "A1"]
+  type: "error" | "iterative";    // Based on Excel settings
+  maxIterations?: number;
+  convergenceThreshold?: number;
+}
+If iterative: generate equivalent loop with convergence check.
+If error: flag for user resolution.
+
+Stage 10: Business Logic Extraction
+Purpose
+Parse formulas into intermediate representation, infer semantic meaning.
+Formula Parser
+Build or use existing Excel formula parser (e.g., xlcalc, custom ANTLR grammar).
+typescriptinterface ParsedFormula {
+  raw: string;                    // "=IF(A1>100,A1*0.1,0)"
+  ast: FormulaAST;                // Abstract syntax tree
+  functions: FunctionCall[];      // [{name: "IF", args: [...]}]
+  references: CellReference[];
+  constants: Constant[];
+  semanticType?: SemanticType;    // LLM-inferred
+}
+
+interface FormulaAST {
+  type: "function" | "operator" | "reference" | "literal" | "array";
+  value?: any;
+  children?: FormulaAST[];
+  metadata?: {
+    excelFunction: string;
+    typescriptEquivalent: string;
+  };
+}
+Function Mapping Table
+Excel FunctionTypeScript EquivalentNotesSUMarray.reduce((a,b) => a+b, 0)IFTernary ? :VLOOKUPMap.get() or array.find()INDEX/MATCHarray[index]SUMIFarray.filter().reduce()ARRAYFORMULA.map()LAMBDAArrow functionDirect mappingLETVariable declarationsOFFSETDynamic range calculationComplexINDIRECTRuntime reference resolutionVery complex
+Semantic Type Inference (LLM)
+typescriptenum SemanticType {
+  TAX_CALCULATION = "tax_calculation",
+  DISCOUNT_LOGIC = "discount_logic",
+  AGGREGATION = "aggregation",
+  LOOKUP = "lookup",
+  CONDITIONAL_LOGIC = "conditional_logic",
+  DATE_CALCULATION = "date_calculation",
+  FINANCIAL_FORMULA = "financial_formula",  // NPV, IRR, PMT
+  STATISTICAL = "statistical",
+  STRING_MANIPULATION = "string_manipulation",
+  CUSTOM_BUSINESS_RULE = "custom_business_rule",
+}
+Business Rule Extraction
+LLM analyzes formula clusters to produce:
+typescriptinterface BusinessRule {
+  id: string;
+  name: string;                   // "Volume Discount Calculation"
+  description: string;            // "Applies 10% discount for orders > $1000"
+  inputs: RuleInput[];
+  outputs: RuleOutput[];
+  logic: LogicRepresentation;
+  constraints: Constraint[];
+  testCases: TestCase[];          // Derived from current Excel data
+}
+
+interface LogicRepresentation {
+  pseudocode: string;             // Human-readable
+  typescript: string;             // Generated code
+  validation: string;             // Zod schema
+}
+Pivot Table Extraction
+typescriptinterface PivotTableDefinition {
+  sourceRange: string;
+  rows: PivotField[];
+  columns: PivotField[];
+  values: PivotValue[];
+  filters: PivotFilter[];
+  
+  // Generates:
+  generatedAggregation: {
+    groupByFields: string[];
+    aggregations: Aggregation[];
+    sqlEquivalent: string;        // For server-side if large data
+  };
+}
+Conditional Formatting → Business Rules
+typescriptinterface ConditionalFormatRule {
+  range: string;
+  condition: ParsedFormula;
+  format: CellFormatting;
+  
+  // Extracted as:
+  businessRule: {
+    name: string;                 // "Highlight overdue items"
+    condition: string;            // "dueDate < today && status !== 'complete'"
+    uiAction: "highlight" | "badge" | "icon";
+    severity: "info" | "warning" | "error";
+  };
+}
+Output: LogicExtractionResult
+typescriptinterface LogicExtractionResult {
+  businessRules: BusinessRule[];
+  calculations: CalculationUnit[];
+  lookupTables: LookupTable[];
+  pivotDefinitions: PivotDefinition[];
+  uiHints: UIHint[];              // From conditional formatting
+  unsupportedFeatures: UnsupportedFeature[];
+  testSuite: TestCase[];          // Auto-generated from current data
+}
+```
+
+---
+
+## Stage 11: Code Generation
+
+### Purpose
+Generate production-ready Next.js + Prisma + TypeScript application.
+
+### Generation Architecture
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CODE GENERATION PIPELINE                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  LogicExtractionResult                                          │
+│         │                                                       │
+│         ▼                                                       │
+│  ┌─────────────────┐                                            │
+│  │  Schema Gen     │──▶ prisma/schema.prisma                    │
+│  └─────────────────┘                                            │
+│         │                                                       │
+│         ▼                                                       │
+│  ┌─────────────────┐    ┌─────────────────┐                     │
+│  │  Types Gen      │──▶ │ src/types/      │                     │
+│  └─────────────────┘    │   models.ts     │                     │
+│         │               │   validation.ts │                     │
+│         ▼               └─────────────────┘                     │
+│  ┌─────────────────┐    ┌─────────────────┐                     │
+│  │  Calc Engine    │──▶ │ src/lib/        │                     │
+│  └─────────────────┘    │   calculations/ │                     │
+│         │               │   lookups/      │                     │
+│         ▼               └─────────────────┘                     │
+│  ┌─────────────────┐    ┌─────────────────┐                     │
+│  │  API Routes     │──▶ │ src/app/api/    │                     │
+│  └─────────────────┘    └─────────────────┘                     │
+│         │                                                       │
+│         ▼                                                       │
+│  ┌─────────────────┐    ┌─────────────────┐                     │
+│  │  UI Components  │──▶ │ src/components/ │                     │
+│  └─────────────────┘    │ src/app/        │                     │
+│         │               └─────────────────┘                     │
+│         ▼                                                       │
+│  ┌─────────────────┐    ┌─────────────────┐                     │
+│  │  Tests Gen      │──▶ │ __tests__/      │                     │
+│  └─────────────────┘    └─────────────────┘                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Generated Project Structure
+```
+generated-app/
+├── prisma/
+│   └── schema.prisma           # Data model
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx
+│   │   ├── page.tsx            # Main calculator page
+│   │   ├── api/
+│   │   │   ├── calculate/route.ts
+│   │   │   ├── scenarios/route.ts
+│   │   │   └── export/route.ts
+│   │   └── scenarios/
+│   │       └── page.tsx        # Saved scenarios
+│   ├── components/
+│   │   ├── InputForm.tsx
+│   │   ├── ResultsDisplay.tsx
+│   │   ├── InputGroup.tsx      # Per Excel section
+│   │   └── OutputGroup.tsx
+│   ├── lib/
+│   │   ├── calculations/
+│   │   │   ├── index.ts        # Main calculation orchestrator
+│   │   │   ├── [ruleName].ts   # Per business rule
+│   │   │   └── types.ts
+│   │   ├── lookups/
+│   │   │   └── [tableName].ts
+│   │   └── validation/
+│   │       └── schemas.ts      # Zod schemas
+│   └── types/
+│       └── index.ts
+├── __tests__/
+│   ├── calculations.test.ts    # Auto-generated from Excel data
+│   └── integration.test.ts
+├── package.json
+├── tsconfig.json
+├── tailwind.config.js
+└── vercel.json
+Schema Generation (Prisma)
+typescript// Input from Excel structure:
+// - Input cells with labels → fields
+// - Lookup tables → related models
+// - Scenarios support → Scenario model
+
+// Generated prisma/schema.prisma:
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Scenario {
+  id          String   @id @default(cuid())
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+  
+  // Input fields (from Excel INPUT cells)
+  salesAmount     Decimal
+  discountRate    Decimal
+  taxRate         Decimal
+  // ... all inputs
+  
+  // Computed outputs (cached)
+  totalRevenue    Decimal?
+  netProfit       Decimal?
+  // ... all outputs
+}
+
+// Lookup tables become models
+model ProductCategory {
+  id          String   @id
+  name        String
+  marginRate  Decimal
+}
+Calculation Engine Generation
+typescript// src/lib/calculations/volumeDiscount.ts
+
+import { z } from "zod";
+
+// Input validation (from data validation rules)
+export const volumeDiscountInputSchema = z.object({
+  orderAmount: z.number().min(0),
+  customerTier: z.enum(["standard", "premium", "enterprise"]),
+});
+
+export type VolumeDiscountInput = z.infer<typeof volumeDiscountInputSchema>;
+
+export interface VolumeDiscountOutput {
+  discountRate: number;
+  discountAmount: number;
+  finalAmount: number;
+}
+
+/**
+ * Volume Discount Calculation
+ * 
+ * Business Rule: Apply tiered discount based on order amount and customer tier.
+ * Source: Sheet1!D5 (Excel formula: =IF(B5>1000,IF(C5="premium",0.15,0.1),0))
+ */
+export function calculateVolumeDiscount(
+  input: VolumeDiscountInput
+): VolumeDiscountOutput {
+  const { orderAmount, customerTier } = input;
+  
+  let discountRate: number;
+  
+  if (orderAmount > 1000) {
+    discountRate = customerTier === "premium" ? 0.15 : 0.10;
+  } else {
+    discountRate = 0;
+  }
+  
+  const discountAmount = orderAmount * discountRate;
+  const finalAmount = orderAmount - discountAmount;
+  
+  return {
+    discountRate,
+    discountAmount,
+    finalAmount,
+  };
+}
+UI Component Generation
+typescript// src/components/InputGroup.tsx
+
+interface InputGroupProps {
+  title: string;
+  description?: string;
+  inputs: InputField[];
+  values: Record<string, any>;
+  onChange: (field: string, value: any) => void;
+  errors?: Record<string, string>;
+}
+
+// Generated based on Excel input groupings
+// - Preserves visual organization from spreadsheet
+// - Applies appropriate input types
+// - Shows validation errors inline
+Test Generation
+typescript// __tests__/calculations.test.ts
+
+import { calculateVolumeDiscount } from "@/lib/calculations/volumeDiscount";
+
+describe("Volume Discount Calculation", () => {
+  // Auto-generated from Excel data (current values = expected results)
+  
+  it("should apply 10% discount for standard tier over $1000", () => {
+    const result = calculateVolumeDiscount({
+      orderAmount: 1500,
+      customerTier: "standard",
+    });
+    
+    expect(result.discountRate).toBe(0.10);
+    expect(result.discountAmount).toBe(150);
+    expect(result.finalAmount).toBe(1350);
+  });
+  
+  it("should apply 15% discount for premium tier over $1000", () => {
+    const result = calculateVolumeDiscount({
+      orderAmount: 1500,
+      customerTier: "premium",
+    });
+    
+    expect(result.discountRate).toBe(0.15);
+    expect(result.discountAmount).toBe(225);
+    expect(result.finalAmount).toBe(1275);
+  });
+  
+  // ... more test cases from Excel scenarios
+});
+```
+
+---
+
+## Stage 12: Scaffold & Deploy
+
+### Purpose
+Create deployable project, run migrations, deploy to Vercel.
+
+### Scaffold Process
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      SCAFFOLD & DEPLOY FLOW                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Create project directory                                    │
+│  2. Write all generated files                                   │
+│  3. Initialize git repository                                   │
+│  4. Install dependencies (npm install)                          │
+│  5. Run Prisma migrations                                       │
+│  6. Run test suite (verify calculations match Excel)            │
+│  7. Create Vercel project via API                               │
+│  8. Push to GitHub (triggers Vercel deploy)                     │
+│  9. Return deployment URL                                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+Deployment Configuration
+typescriptinterface DeploymentConfig {
+  projectName: string;            // Sanitized from Excel filename
+  vercelTeam?: string;
+  githubOrg: string;
+  databaseProvider: "supabase" | "vercel-postgres" | "neon";
+  
+  // Environment variables to set
+  envVars: {
+    DATABASE_URL: string;
+    NEXTAUTH_SECRET: string;      // If auth enabled
+  };
+}
+Output: ScaffoldResult
+typescriptinterface ScaffoldResult {
+  projectPath: string;
+  githubUrl: string;
+  deploymentUrl: string;
+  databaseUrl: string;
+  
+  testResults: {
+    passed: number;
+    failed: number;
+    failures: TestFailure[];
+  };
+  
+  generationReport: {
+    totalInputs: number;
+    totalOutputs: number;
+    businessRules: number;
+    unsupportedFeatures: UnsupportedFeature[];
+    manualReviewRequired: string[];
+  };
+}
+
+Data Models Summary
+New Pydantic Models (core/models.py additions)
+python# Stage 8
+class ClassifiedCell(BaseModel):
+    address: str
+    role: CellRole
+    input_type: Optional[InputType]
+    label: Optional[str]
+    formula: Optional[str]
+    value: Any
+    validation: Optional[DataValidation]
+    referenced_by: List[str]
+    references: List[str]
+
+class CellClassificationResult(BaseModel):
+    sheets: List[SheetClassification]
+    named_ranges: List[NamedRange]
+    vba_macros: List[VBAMacro]
+    data_validations: List[DataValidation]
+    conditional_formats: List[ConditionalFormat]
+    pivot_tables: List[PivotTableDefinition]
+
+# Stage 9
+class DependencyGraph(BaseModel):
+    nodes: Dict[str, GraphNode]
+    edges: List[Edge]
+    execution_order: List[str]
+    clusters: List[CalculationCluster]
+    circular_refs: List[CircularRef]
+
+# Stage 10
+class BusinessRule(BaseModel):
+    id: str
+    name: str
+    description: str
+    inputs: List[RuleInput]
+    outputs: List[RuleOutput]
+    logic: LogicRepresentation
+    constraints: List[Constraint]
+    test_cases: List[TestCase]
+
+class LogicExtractionResult(BaseModel):
+    business_rules: List[BusinessRule]
+    calculations: List[CalculationUnit]
+    lookup_tables: List[LookupTable]
+    pivot_definitions: List[PivotDefinition]
+    ui_hints: List[UIHint]
+    unsupported_features: List[UnsupportedFeature]
+    test_suite: List[TestCase]
+
+# Stage 11-12
+class GeneratedProject(BaseModel):
+    files: Dict[str, str]         # path -> content
+    dependencies: Dict[str, str]  # package -> version
+    prisma_schema: str
+    test_suite: List[TestCase]
+
+class ScaffoldResult(BaseModel):
+    project_path: str
+    github_url: str
+    deployment_url: str
+    database_url: str
+    test_results: TestResults
+    generation_report: GenerationReport
+```
+
+---
+
+## LLM Prompting Strategy
+
+### Stage 8: Cell Role Inference
+```
+Given this Excel cell context:
+- Address: {address}
+- Value: {value}
+- Formula: {formula}
+- Adjacent cells: {adjacent}
+- Data validation: {validation}
+- Conditional formatting: {formatting}
+
+Classify this cell's role and semantic purpose.
+Return JSON: {role, inputType, semanticLabel, confidence}
+```
+
+### Stage 10: Business Rule Extraction
+```
+Analyze this calculation cluster from an Excel spreadsheet:
+
+Inputs:
+{inputs with labels and sample values}
+
+Formulas (in dependency order):
+{formulas with addresses}
+
+Outputs:
+{outputs with labels and sample values}
+
+Extract the business rules. For each rule:
+1. Name (concise, business-friendly)
+2. Description (what it does, when it applies)
+3. Pseudocode logic
+4. TypeScript implementation
+5. Zod validation schema for inputs
+6. Test cases (at least 3, including edge cases)
+
+Return structured JSON.
+```
+
+### Stage 11: Component Generation
+```
+Generate a React component for this input group:
+
+Group name: {name}
+Inputs:
+{inputs with types, labels, validation rules}
+
+Requirements:
+- Use Tailwind CSS
+- Include validation error display
+- Support controlled inputs
+- Match this design system: {design tokens}
+
+Return complete TSX code.
+
+Performance & Data Integrity Improvements Over Excel
+AspectExcel ProblemWeb App SolutionConcurrent accessFile locking, merge conflictsDatabase transactions, optimistic lockingData validationEasily bypassedServer-side Zod validation, DB constraintsAudit trailNoneFull history, createdBy/updatedAtFormula errorsSilent #REF!, #VALUE!TypeScript type safety, runtime checksVersion controlManual file copiesGit history, deployment rollbackCalculation speedRecalc entire workbookTargeted recalculation, memoizationMobile accessPoor/noneResponsive web UIAPI integrationVBA/COM requiredREST/GraphQL endpoints
+
+---
+
+INDIRECT/OFFSET Error Handling
+Detection in Stage 10
+typescript// src/stages/s10_logic_extraction/formula_parser.ts
+
+const UNSUPPORTED_DYNAMIC_FUNCTIONS = [
+  "INDIRECT",
+  "OFFSET",
+  "ADDRESS",      // When used to construct references
+  "INDEX",        // When combined with MATCH in certain patterns
+];
+
+interface UnsupportedFeatureError {
+  type: "DYNAMIC_REFERENCE";
+  function: string;
+  cellAddress: string;
+  formula: string;
+  explanation: string;
+  suggestedFix: string;
+}
+
+function detectDynamicReferences(formula: string, address: string): UnsupportedFeatureError | null {
+  const upperFormula = formula.toUpperCase();
+  
+  if (upperFormula.includes("INDIRECT(")) {
+    return {
+      type: "DYNAMIC_REFERENCE",
+      function: "INDIRECT",
+      cellAddress: address,
+      formula: formula,
+      explanation: `
+INDIRECT creates cell references at runtime from text strings.
+Example: INDIRECT("A" & B1) → References cell A5 if B1=5
+
+This cannot be safely converted to static code because:
+1. The referenced cells are unknown until runtime
+2. Security risk: user input could reference unintended data
+3. Type safety impossible: return type depends on runtime value
+
+Your formula: ${formula}
+`,
+      suggestedFix: `
+Options to resolve:
+1. Replace with explicit references: Instead of INDIRECT("Sheet"&A1&"!B2"), 
+   use IF/SWITCH to handle each possible sheet explicitly.
+   
+2. Use INDEX/MATCH: Often INDIRECT is used for dynamic lookups that 
+   INDEX/MATCH can handle with static ranges.
+   
+3. Restructure data: If switching between sheets, consolidate into 
+   one sheet with a "source" column.
+
+If you need help restructuring this formula, share the business logic 
+you're trying to achieve.
+`,
+    };
+  }
+  
+  if (upperFormula.includes("OFFSET(")) {
+    return {
+      type: "DYNAMIC_REFERENCE",
+      function: "OFFSET",
+      cellAddress: address,
+      formula: formula,
+      explanation: `
+OFFSET creates dynamic ranges that expand based on runtime values.
+Example: OFFSET(A1, 0, 0, COUNT(A:A), 1) → Variable-height range
+
+This cannot be safely converted because:
+1. Range boundaries are computed at runtime
+2. May reference cells outside expected data area
+3. Performance: entire column references (A:A) are problematic
+
+Your formula: ${formula}
+`,
+      suggestedFix: `
+Options to resolve:
+1. Define explicit named ranges: Replace OFFSET with a named range 
+   that covers the maximum expected data area.
+   
+2. Use structured tables: Convert data to Excel Table format, then 
+   use Table[Column] references which are static.
+   
+3. Use INDEX for dynamic ranges: INDEX can often replace OFFSET 
+   with more predictable behavior.
+   
+4. For growing data: Design the web app with dynamic arrays/lists 
+   instead of spreadsheet-style ranges.
+`,
+    };
+  }
+  
+  return null;
+}
+Error Reporting UI
+typescript// Generated error report for user
+
+interface GenerationErrorReport {
+  canProceed: boolean;
+  criticalErrors: UnsupportedFeatureError[];   // Must fix before generation
+  warnings: UnsupportedFeatureError[];          // Can proceed, degraded functionality
+  
+  affectedCells: {
+    address: string;
+    formula: string;
+    dependents: string[];  // Cells that depend on this one
+  }[];
+  
+  impactAnalysis: {
+    totalCells: number;
+    affectedCells: number;
+    percentageAffected: number;
+    blockedOutputs: string[];  // Output cells that can't be calculated
+  };
+}
+
+// Example output:
+{
+  canProceed: false,
+  criticalErrors: [
+    {
+      type: "DYNAMIC_REFERENCE",
+      function: "INDIRECT",
+      cellAddress: "Sheet1!E15",
+      formula: "=INDIRECT(\"Pricing_\"&$B$2&\"!C\"&ROW())",
+      explanation: "...",
+      suggestedFix: "..."
+    }
+  ],
+  impactAnalysis: {
+    totalCells: 247,
+    affectedCells: 12,
+    percentageAffected: 4.9,
+    blockedOutputs: ["Total Revenue", "Net Margin", "Break-even Point"]
+  }
+}
+User-Facing Error Page
+tsx// Generated app: src/app/generation-error/page.tsx
+
+export default function GenerationErrorPage({ errors }: { errors: GenerationErrorReport }) {
+  return (
+    <div className="max-w-4xl mx-auto p-8">
+      <div className="bg-red-950 border border-red-800 rounded-lg p-6 mb-8">
+        <h1 className="text-2xl font-bold text-red-400 mb-2">
+          Cannot Generate Web App
+        </h1>
+        <p className="text-red-300">
+          Your Excel file contains {errors.criticalErrors.length} formula pattern(s) 
+          that cannot be safely converted to code.
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        {errors.criticalErrors.map((error, i) => (
+          <div key={i} className="bg-stone-900 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="bg-red-900 text-red-300 px-2 py-1 rounded text-sm font-mono">
+                {error.function}
+              </span>
+              <span className="text-stone-400">in cell</span>
+              <span className="font-mono text-amber-400">{error.cellAddress}</span>
+            </div>
+            
+            <div className="bg-stone-950 rounded p-4 mb-4 font-mono text-sm text-stone-300">
+              {error.formula}
+            </div>
+            
+            <details className="group">
+              <summary className="cursor-pointer text-amber-500 hover:text-amber-400">
+                Why this can't be converted
+              </summary>
+              <pre className="mt-4 text-sm text-stone-400 whitespace-pre-wrap">
+                {error.explanation}
+              </pre>
+            </details>
+            
+            <details className="group mt-4">
+              <summary className="cursor-pointer text-emerald-500 hover:text-emerald-400">
+                How to fix this
+              </summary>
+              <pre className="mt-4 text-sm text-stone-400 whitespace-pre-wrap">
+                {error.suggestedFix}
+              </pre>
+            </details>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 bg-stone-900 rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-stone-200 mb-4">Impact Analysis</h2>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-3xl font-bold text-stone-200">
+              {errors.impactAnalysis.affectedCells}
+            </div>
+            <div className="text-stone-500 text-sm">Affected Cells</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold text-red-400">
+              {errors.impactAnalysis.blockedOutputs.length}
+            </div>
+            <div className="text-stone-500 text-sm">Blocked Outputs</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold text-stone-200">
+              {errors.impactAnalysis.percentageAffected.toFixed(1)}%
+            </div>
+            <div className="text-stone-500 text-sm">Of Workbook</div>
+          </div>
+        </div>
+        
+        {errors.impactAnalysis.blockedOutputs.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-stone-800">
+            <div className="text-stone-400 text-sm mb-2">These outputs cannot be calculated:</div>
+            <div className="flex flex-wrap gap-2">
+              {errors.impactAnalysis.blockedOutputs.map((output) => (
+                <span key={output} className="bg-stone-800 px-3 py-1 rounded text-stone-300 text-sm">
+                  {output}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 flex gap-4">
+        
+          href="/upload"
+          className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-lg font-medium"
+        >
+          Upload Fixed Excel File
+        </a>
+        
+          href="mailto:support@tragaldabas.com?subject=Formula%20Conversion%20Help"
+          className="bg-stone-800 hover:bg-stone-700 text-stone-200 px-6 py-3 rounded-lg font-medium"
+        >
+          Request Help
+        </a>
+      </div>
+    </div>
+  );
+}
+
+Lookup Table Implementation
+Stage 10: Extraction
+typescript// Detect and extract lookup tables from Excel
+
+interface ExtractedLookupTable {
+  name: string;                    // Sanitized table name
+  sourceRange: string;             // "Sheet2!A1:D500"
+  keyColumn: string;               // Column used for lookups
+  columns: LookupColumnDef[];
+  rowCount: number;
+  
+  // VLOOKUP/INDEX-MATCH formulas that reference this table
+  referencedBy: {
+    cellAddress: string;
+    formula: string;
+    lookupColumn: string;
+  }[];
+}
+
+interface LookupColumnDef {
+  name: string;                    // Sanitized column name
+  originalHeader: string;
+  dataType: "string" | "number" | "date" | "boolean";
+  isKeyColumn: boolean;
+  sampleValues: any[];
+}
+
+function extractLookupTables(
+  classificationResult: CellClassificationResult,
+  dependencyGraph: DependencyGraph
+): ExtractedLookupTable[] {
+  const lookupTables: ExtractedLookupTable[] = [];
+  
+  // Find all VLOOKUP, XLOOKUP, INDEX/MATCH patterns
+  const lookupFormulas = findLookupFormulas(dependencyGraph);
+  
+  // Group by lookup range
+  const rangeGroups = groupByLookupRange(lookupFormulas);
+  
+  for (const [range, formulas] of rangeGroups) {
+    const rangeData = extractRangeData(range);
+    
+    if (rangeData.rowCount > 100) {
+      // Large table → database
+      lookupTables.push({
+        name: inferTableName(range, formulas),
+        sourceRange: range,
+        keyColumn: detectKeyColumn(rangeData, formulas),
+        columns: rangeData.columns.map(col => ({
+          name: sanitizeColumnName(col.header),
+          originalHeader: col.header,
+          dataType: inferColumnType(col.values),
+          isKeyColumn: col.index === 0,
+          sampleValues: col.values.slice(0, 5),
+        })),
+        rowCount: rangeData.rowCount,
+        referencedBy: formulas,
+      });
+    }
+  }
+  
+  return lookupTables;
+}
+Database Seeding (Stage 12)
+typescript// Generated: prisma/seed.ts
+
+import { PrismaClient } from "@prisma/client";
+import lookupData from "./seed-data/lookups.json";
+
+const prisma = new PrismaClient();
+
+async function main() {
+  const appId = process.env.APP_ID!;
+  
+  for (const table of lookupData.tables) {
+    // Create lookup table metadata
+    const lookupTable = await prisma.lookupTable.create({
+      data: {
+        appId,
+        name: table.name,
+        keyColumn: table.keyColumn,
+        columns: table.columns,
+      },
+    });
+    
+    // Batch insert rows (1000 at a time for performance)
+    const BATCH_SIZE = 1000;
+    for (let i = 0; i < table.rows.length; i += BATCH_SIZE) {
+      const batch = table.rows.slice(i, i + BATCH_SIZE);
+      
+      await prisma.lookupRow.createMany({
+        data: batch.map(row => ({
+          lookupTableId: lookupTable.id,
+          keyValue: String(row[table.keyColumn]),
+          data: row,
+        })),
+      });
+    }
+    
+    console.log(`Seeded ${table.rows.length} rows into ${table.name}`);
+  }
+}
+
+main()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect());
+Generated Lookup Functions
+typescript// Generated: src/lib/lookups/productCategories.ts
+
+import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
+
+export interface ProductCategory {
+  id: string;
+  name: string;
+  marginRate: number;
+  minOrderQty: number;
+}
+
+// Cached lookup - revalidates every hour
+export const getProductCategory = unstable_cache(
+  async (categoryId: string): Promise<ProductCategory | null> => {
+    const row = await prisma.lookupRow.findFirst({
+      where: {
+        lookupTable: { name: "product_categories" },
+        keyValue: categoryId,
+      },
+    });
+    
+    if (!row) return null;
+    
+    return row.data as ProductCategory;
+  },
+  ["product-category"],
+  { revalidate: 3600 }
+);
+
+// Bulk lookup for batch calculations
+export async function getProductCategories(
+  categoryIds: string[]
+): Promise<Map<string, ProductCategory>> {
+  const rows = await prisma.lookupRow.findMany({
+    where: {
+      lookupTable: { name: "product_categories" },
+      keyValue: { in: categoryIds },
+    },
+  });
+  
+  return new Map(
+    rows.map(row => [row.keyValue, row.data as ProductCategory])
+  );
+}
+
+// Full table (for dropdowns, small tables only)
+export const getAllProductCategories = unstable_cache(
+  async (): Promise<ProductCategory[]> => {
+    const rows = await prisma.lookupRow.findMany({
+      where: {
+        lookupTable: { name: "product_categories" },
+      },
+      orderBy: { keyValue: "asc" },
+    });
+    
+    return rows.map(row => row.data as ProductCategory);
+  },
+  ["all-product-categories"],
+  { revalidate: 3600 }
+);
+Calculation Engine Integration
+typescript// Generated: src/lib/calculations/orderTotal.ts
+
+import { getProductCategory } from "@/lib/lookups/productCategories";
+
+export async function calculateOrderTotal(input: OrderInput): Promise<OrderOutput> {
+  // Fetch lookup data
+  const category = await getProductCategory(input.categoryId);
+  
+  if (!category) {
+    throw new CalculationError(
+      `Unknown category: ${input.categoryId}`,
+      "LOOKUP_NOT_FOUND",
+      { field: "categoryId", value: input.categoryId }
+    );
+  }
+  
+  // Validate against lookup constraints
+  if (input.quantity < category.minOrderQty) {
+    throw new ValidationError(
+      `Minimum order quantity for ${category.name} is ${category.minOrderQty}`,
+      "MIN_ORDER_QTY",
+      { field: "quantity", min: category.minOrderQty }
+    );
+  }
+  
+  // Apply margin from lookup
+  const basePrice = input.unitPrice * input.quantity;
+  const margin = basePrice * category.marginRate;
+  
+  return {
+    basePrice,
+    margin,
+    total: basePrice + margin,
+    category: category.name,
+  };
+}
+
+
+---
+
+

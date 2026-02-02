@@ -1,4 +1,4 @@
-# Dockerfile for Railway/Render worker deployment
+# Dockerfile for Railway worker deployment
 FROM python:3.12-slim
 
 # Set working directory
@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
-# Expose port (Railway/Render will set PORT env var)
+# Expose port (Railway will set PORT env var)
 EXPOSE 8000
 
 # Start the worker

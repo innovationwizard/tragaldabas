@@ -23,11 +23,6 @@ Deploy the pipeline processing to a separate service:
 railway up --service worker
 ```
 
-**Render**:
-- Create a new Web Service
-- Use `requirements-full.txt` for dependencies
-- Set start command: `python -m web.worker`
-
 **Fly.io**:
 ```bash
 fly launch --name tragaldabas-worker
@@ -94,7 +89,7 @@ Upgrade to Vercel Pro for higher limits:
        ├─────────────────┐
        ▼                 ▼
 ┌─────────────┐   ┌─────────────┐
-│   Supabase  │   │   Worker    │ (Railway/Render)
+│   Supabase  │   │   Worker    │ (Railway)
 │     DB      │   │  (Pipeline) │
 └─────────────┘   └──────────────┘
 ```

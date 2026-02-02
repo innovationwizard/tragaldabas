@@ -34,7 +34,6 @@ For simple endpoints, use Edge Functions instead of serverless functions.
 
 Deploy the FastAPI backend to:
 - Railway
-- Render
 - Fly.io
 - AWS Lambda (with proper configuration)
 - Google Cloud Run
@@ -52,7 +51,7 @@ And deploy only the frontend to Vercel.
 
 For production, consider deploying:
 1. **Frontend** → Vercel (static site)
-2. **Backend** → Railway/Render/Fly.io (full Python environment)
+2. **Backend** → Railway/Fly.io (full Python environment)
 
 This allows:
 - Full access to all dependencies

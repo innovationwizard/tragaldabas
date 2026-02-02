@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Pipeline Worker Service
-Deploy this to Railway, Render, or Fly.io with requirements-full.txt
+Deploy this to Railway with requirements-full.txt
 """
 
 from fastapi import FastAPI, HTTPException, Depends, Header
@@ -206,7 +206,7 @@ async def worker_process(
 
 if __name__ == "__main__":
     import uvicorn
-    # Railway/Render set PORT environment variable
+    # Railway sets PORT environment variable
     port = int(os.getenv("PORT", 8000))
     # Bind to 0.0.0.0 to accept connections from outside container
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
