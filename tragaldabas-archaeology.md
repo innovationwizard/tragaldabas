@@ -2,6 +2,9 @@
 Tragaldabas - Stage 3: Data Archaeology Prototype
 Finds signal in human-authored chaos.
 
+Note: Stages 8-12 extend the pipeline to Excel-to-web-app generation.
+See docs/EXCEL_TO_WEB_APP.md for the full extension architecture.
+
 Usage:
     python archaeology_prototype.py <excel_file> [--sheet <name>]
 

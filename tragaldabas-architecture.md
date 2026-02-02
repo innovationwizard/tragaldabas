@@ -68,11 +68,31 @@ tragaldabas/
 │   │   ├── patterns.py         # Pattern detection
 │   │   └── insights.py         # Insight generation & filtering
 │   │
-│   └── s7_output/
+│   ├── s7_output/
+│   │   ├── __init__.py
+│   │   ├── output_manager.py   # Main stage coordinator
+│   │   ├── text_generator.py   # Text/markdown output
+│   │   └── slide_builder.py    # PowerPoint generation
+│   │
+│   ├── s8_cell_classification/
+│   │   ├── __init__.py
+│   │   └── classifier.py       # Cell role classification
+│   │
+│   ├── s9_dependency_graph/
+│   │   ├── __init__.py
+│   │   └── builder.py          # Dependency graph construction
+│   │
+│   ├── s10_logic_extraction/
+│   │   ├── __init__.py
+│   │   └── extractor.py        # Formula parsing + rule extraction
+│   │
+│   ├── s11_code_generation/
+│   │   ├── __init__.py
+│   │   └── generator.py        # App code generation
+│   │
+│   └── s12_scaffold_deploy/
 │       ├── __init__.py
-│       ├── output_manager.py   # Main stage coordinator
-│       ├── text_generator.py   # Text/markdown output
-│       └── slide_builder.py    # PowerPoint generation
+│       └── scaffolder.py       # Local scaffold output
 │
 ├── llm/                        # LLM integration
 │   ├── __init__.py
@@ -493,6 +513,11 @@ from stages.s4_reconciliation import Reconciler
 from stages.s5_etl import ETLManager
 from stages.s6_analysis import Analyzer
 from stages.s7_output import OutputManager
+from stages.s8_cell_classification import CellClassifier
+from stages.s9_dependency_graph import DependencyGraphBuilder
+from stages.s10_logic_extraction import LogicExtractor
+from stages.s11_code_generation import CodeGenerator
+from stages.s12_scaffold_deploy import Scaffolder
 from ui.progress import ProgressTracker
 from ui.prompts import UserPrompt
 

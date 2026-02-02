@@ -1,6 +1,6 @@
 """FastAPI application with Supabase Auth"""
 
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request, status
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -331,6 +331,7 @@ async def get_current_user_info(user: dict = Depends(get_current_user)):
 @app.post("/api/pipeline/upload")
 async def upload_file(
     file: UploadFile = File(...),
+    app_generation: bool = Form(False),
     user: dict = Depends(get_current_user)
 ):
     """Upload file and start pipeline"""
@@ -380,7 +381,8 @@ async def upload_file(
         "current_stage_name": None,
         "completed_stages": [],
         "questions": [],
-        "storage_path": storage_path  # Store the storage path for later retrieval
+        "storage_path": storage_path,  # Store the storage path for later retrieval
+        "app_generation": bool(app_generation),
     }
     
     # Create job in database (synchronous call)
@@ -480,7 +482,7 @@ async def retry_job(
         raise HTTPException(status_code=500, detail=f"Failed to retry job: {str(e)}")
 
 
-async def run_pipeline(job_id: str, file_path: str, user_id: str):
+async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation: bool):
     """Run pipeline in background - lazy imports to reduce serverless function size"""
     print(f"🎯 run_pipeline() CALLED for job {job_id}, file: {file_path}", flush=True)
     # Lazy import heavy dependencies only when pipeline runs
@@ -493,11 +495,12 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
     class WebProgressTracker(ProgressTracker):
         """Polling-based progress tracker - stores progress in Supabase database"""
         
-        def __init__(self, job_id: str):
+        def __init__(self, job_id: str, final_stage: int):
             super().__init__()
             self.job_id = job_id
             self.current_stage = None
             self.stage_name = None
+            self.final_stage = final_stage
         
         async def start_stage(self, stage_num: int, stage_name: str):
             self.current_stage = stage_num
@@ -531,8 +534,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             try:
                 await update_job_in_db(self.job_id, {
                     "status": "completed",
-                    "current_stage": 7,  # Output stage
-                    "current_stage_name": "Output"
+                    "current_stage": self.final_stage,
+                    "current_stage_name": "Output" if self.final_stage == 7 else "Scaffold & Deploy"
                 })
                 print(f"✅ WebProgressTracker.complete() finished for job {self.job_id}", flush=True)
             except Exception as e:
@@ -574,7 +577,9 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
         # Update job status to running
         await update_job_in_db(job_id, {"status": "running"})
         
-        progress = WebProgressTracker(job_id)
+        settings.EXCEL_APP_GENERATION_ENABLED = bool(app_generation)
+        final_stage = 12 if app_generation else 7
+        progress = WebProgressTracker(job_id, final_stage)
         prompt = WebUserPrompt(job_id)
         
         orchestrator = Orchestrator(
@@ -758,6 +763,11 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str):
             "etl": to_dict(ctx.etl),
             "analysis": to_dict(ctx.analysis),
             "output": output_dict,
+            "cell_classification": to_dict(ctx.cell_classification),
+            "dependency_graph": to_dict(ctx.dependency_graph),
+            "logic_extraction": to_dict(ctx.logic_extraction),
+            "generated_project": to_dict(ctx.generated_project),
+            "scaffold": to_dict(ctx.scaffold),
         }
         
         # Update job with completed status and result
@@ -956,7 +966,8 @@ async def process_job(
             )
         
         print(f"📞 process_job() calling run_pipeline() for job {job_id}", flush=True)
-        await run_pipeline(job_id, str(file_path), user_id)
+        app_generation = bool(job.get("app_generation", False))
+        await run_pipeline(job_id, str(file_path), user_id, app_generation)
         print(f"✅ process_job() run_pipeline() returned for job {job_id}", flush=True)
         return {"message": "Job processed successfully", "job_id": job_id}
     except HTTPException:

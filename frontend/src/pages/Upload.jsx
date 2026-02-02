@@ -6,6 +6,7 @@ import Layout from '../components/Layout'
 const Upload = () => {
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [generateApp, setGenerateApp] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
@@ -25,6 +26,10 @@ const Upload = () => {
         return
       }
       
+      const isExcel = selectedFile.name.match(/\.(xlsx|xls)$/i)
+      if (!isExcel) {
+        setGenerateApp(false)
+      }
       setFile(selectedFile)
       setError('')
     }
@@ -42,7 +47,9 @@ const Upload = () => {
 
     try {
       const formData = new FormData()
+      const isExcel = file.name.match(/\.(xlsx|xls)$/i)
       formData.append('file', file)
+      formData.append('app_generation', Boolean(generateApp && isExcel))
 
       const response = await axios.post('/api/pipeline/upload', formData, {
         headers: {
@@ -109,6 +116,18 @@ const Upload = () => {
                 </label>
               </div>
             </div>
+
+            {file && file.name.match(/\.(xlsx|xls)$/i) && (
+              <label className="flex items-center gap-3 text-sm text-brand-muted">
+                <input
+                  type="checkbox"
+                  checked={generateApp}
+                  onChange={(e) => setGenerateApp(e.target.checked)}
+                  className="h-4 w-4 rounded border-brand-border bg-transparent text-brand-accent focus:ring-brand-accent"
+                />
+                Generate a web app from this Excel file
+              </label>
+            )}
 
             <button
               type="submit"

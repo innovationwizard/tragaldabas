@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     # Archaeology
     ARCHAEOLOGY_MAX_PREVIEW_ROWS: int = 50
     FUZZY_MATCH_THRESHOLD: int = 80
+
+    # Excel-to-web-app generator (Stages 8-12)
+    EXCEL_APP_GENERATION_ENABLED: bool = False
     
     class Config:
         env_file = ".env"

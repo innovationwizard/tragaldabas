@@ -82,3 +82,39 @@ class LLMProvider(str, Enum):
     OPENAI = "openai"
     GEMINI = "gemini"
 
+
+class CellRole(str, Enum):
+    """Functional role of a cell in a workbook"""
+    INPUT = "input"
+    FORMULA = "formula"
+    OUTPUT = "output"
+    INTERMEDIATE = "intermediate"
+    STATIC = "static"
+    LABEL = "label"
+    STRUCTURAL = "structural"
+
+
+class InputType(str, Enum):
+    """Input data type for generated UI fields"""
+    TEXT = "text"
+    NUMBER = "number"
+    DATE = "date"
+    BOOLEAN = "boolean"
+    CURRENCY = "currency"
+    PERCENTAGE = "percentage"
+    ENUM = "enum"
+
+
+class SemanticType(str, Enum):
+    """Inferred semantic category for formulas/business rules"""
+    TAX_CALCULATION = "tax_calculation"
+    DISCOUNT_LOGIC = "discount_logic"
+    AGGREGATION = "aggregation"
+    LOOKUP = "lookup"
+    CONDITIONAL_LOGIC = "conditional_logic"
+    DATE_CALCULATION = "date_calculation"
+    FINANCIAL_FORMULA = "financial_formula"
+    STATISTICAL = "statistical"
+    STRING_MANIPULATION = "string_manipulation"
+    CUSTOM_BUSINESS_RULE = "custom_business_rule"
+

@@ -14,6 +14,7 @@ Transform raw files into actionable business intelligence.
 - **Data Archaeology**: Automatically finds signal in messy human-created spreadsheets
 - **PostgreSQL Integration**: Direct database connection with schema generation
 - **Executive Output**: Generates PowerPoint presentations and text summaries
+- **Planned**: Excel to web app generator (Stages 8-12)
 
 ## Installation
 
@@ -70,6 +71,15 @@ python main.py data/file.xlsx --output-dir ./my_output
 6. **Schema & ETL**: Design PostgreSQL schema, transform, validate, persist
 7. **Analysis**: Generate insights and metrics (LLM-powered)
 8. **Output**: Create PowerPoint slides and text summaries
+9. **Cell Classification**: Identify inputs, outputs, labels, validation, formatting
+10. **Dependency Graph**: Build execution order and clusters
+11. **Logic Extraction**: Parse formulas, infer rules, generate tests
+12. **Code Generation**: Generate Next.js + Prisma app
+13. **Scaffold & Deploy**: Manual instructions provided
+
+Excel-to-web-app extension docs:
+- `docs/EXCEL_TO_WEB_APP.md`
+- `docs/STAGE12_MANUAL_DEPLOY.md`
 
 ## Output Structure
 

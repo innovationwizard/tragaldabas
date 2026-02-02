@@ -5,10 +5,12 @@ from typing import Optional
 
 from core.models import *
 from core.exceptions import PipelineError, StageError
-from core.enums import ContentType
+from core.enums import ContentType, FileType
 from stages import (
     Receiver, Classifier, StructureInferrer, Archaeologist,
-    Reconciler, ETLManager, Analyzer, OutputManager
+    Reconciler, ETLManager, Analyzer, OutputManager,
+    CellClassifier, DependencyGraphBuilder, LogicExtractor,
+    CodeGenerator, Scaffolder
 )
 from ui.progress import ProgressTracker
 from ui.prompts import UserPrompt
@@ -27,6 +29,11 @@ class PipelineContext:
     etl: Optional[ETLResult] = None
     analysis: Optional[AnalysisResult] = None
     output: Optional[OutputResult] = None
+    cell_classification: Optional[CellClassificationResult] = None
+    dependency_graph: Optional[DependencyGraph] = None
+    logic_extraction: Optional[LogicExtractionResult] = None
+    generated_project: Optional[GeneratedProject] = None
+    scaffold: Optional[ScaffoldResult] = None
 
 
 class Orchestrator:
@@ -52,6 +59,11 @@ class Orchestrator:
             5: ETLManager(db_connection_string),
             6: Analyzer(),
             7: OutputManager(),
+            8: CellClassifier(),
+            9: DependencyGraphBuilder(),
+            10: LogicExtractor(),
+            11: CodeGenerator(),
+            12: Scaffolder(),
         }
     
     async def run(self, file_path: str) -> PipelineContext:
@@ -80,6 +92,9 @@ class Orchestrator:
             
             # Stage 7: Output
             ctx.output = await self._execute_stage(7, ctx.analysis)
+
+            if self._should_generate_app(ctx):
+                ctx = await self._app_generation_path(ctx)
             
             # Handle both sync and async progress trackers
             complete_result = self.progress.complete()
@@ -132,6 +147,31 @@ class Orchestrator:
         })
         
         return ctx
+
+    async def _app_generation_path(self, ctx: PipelineContext) -> PipelineContext:
+        """Generate a web app from Excel workbooks (Stages 8-12)."""
+        ctx.cell_classification = await self._execute_stage(8, ctx.file_path)
+        ctx.dependency_graph = await self._execute_stage(9, ctx.cell_classification)
+        ctx.logic_extraction = await self._execute_stage(10, ctx.dependency_graph)
+        ctx.generated_project = await self._execute_stage(
+            11,
+            AppGenerationContext(
+                cell_classification=ctx.cell_classification,
+                logic_extraction=ctx.logic_extraction,
+            ),
+        )
+        ctx.scaffold = await self._execute_stage(12, ctx.generated_project)
+        return ctx
+
+    def _should_generate_app(self, ctx: PipelineContext) -> bool:
+        if not settings.EXCEL_APP_GENERATION_ENABLED:
+            return False
+        if not ctx.reception:
+            return False
+        return ctx.reception.metadata.file_type in {
+            FileType.EXCEL_XLSX,
+            FileType.EXCEL_XLS,
+        }
     
     async def _execute_stage(self, stage_num: int, input_data) -> any:
         """Execute a single stage with progress tracking"""

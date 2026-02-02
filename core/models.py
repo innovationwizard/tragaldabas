@@ -1,11 +1,12 @@
 """Core data models for Tragaldabas pipeline"""
 
 from pydantic import BaseModel, Field
-from typing import Optional, Any
+from typing import Optional, Any, Dict, List
 from datetime import datetime
 from .enums import (
     FileType, ContentType, Domain, DataType, SemanticRole,
-    Severity, VisualizationType, ValidationIssueType
+    Severity, VisualizationType, ValidationIssueType,
+    CellRole, InputType, SemanticType
 )
 
 
@@ -229,4 +230,290 @@ class OutputResult(BaseModel):
     pdf_file_path: Optional[str] = None
     slide_count: int = 0
     insight_count: int = 0
+
+
+# ─────────────────────────────────────────────────────────────
+# Stage 8: Cell Classification
+# ─────────────────────────────────────────────────────────────
+
+class DataValidation(BaseModel):
+    """Excel data validation rule"""
+    address: Optional[str] = None
+    validation_type: str
+    operator: Optional[str] = None
+    formula1: Optional[str] = None
+    formula2: Optional[str] = None
+    allow_blank: bool = False
+    options: List[str] = []
+    error_message: Optional[str] = None
+    prompt_title: Optional[str] = None
+    prompt_message: Optional[str] = None
+
+
+class CellFormatting(BaseModel):
+    """Simplified formatting metadata"""
+    number_format: Optional[str] = None
+    font_bold: Optional[bool] = None
+    font_italic: Optional[bool] = None
+    font_color: Optional[str] = None
+    fill_color: Optional[str] = None
+
+
+class NamedRange(BaseModel):
+    name: str
+    ref: str
+
+
+class VBAMacro(BaseModel):
+    name: str
+    code: str
+
+
+class ConditionalFormat(BaseModel):
+    range: str
+    rule: str
+    format_type: Optional[str] = None
+    format_color: Optional[str] = None
+    severity: Optional[str] = None
+
+
+class PivotTableDefinition(BaseModel):
+    name: str
+    source_range: str
+    rows: List[str] = []
+    columns: List[str] = []
+    values: List[str] = []
+    filters: List[str] = []
+
+
+class ClassifiedCell(BaseModel):
+    address: str
+    role: CellRole
+    input_type: Optional[InputType] = None
+    label: Optional[str] = None
+    formula: Optional[str] = None
+    value: Any = None
+    validation: Optional[DataValidation] = None
+    formatting: Optional[CellFormatting] = None
+    referenced_by: List[str] = []
+    references: List[str] = []
+
+
+class InputGroup(BaseModel):
+    name: str
+    cells: List[str] = []
+
+
+class OutputGroup(BaseModel):
+    name: str
+    cells: List[str] = []
+
+
+class SheetSection(BaseModel):
+    name: str
+    cells: List[str] = []
+
+
+class SheetClassification(BaseModel):
+    name: str
+    cells: List[ClassifiedCell] = []
+    input_groups: List[InputGroup] = []
+    output_groups: List[OutputGroup] = []
+    sections: List[SheetSection] = []
+
+
+class CellClassificationResult(BaseModel):
+    sheets: List[SheetClassification] = []
+    named_ranges: List[NamedRange] = []
+    vba_macros: List[VBAMacro] = []
+    data_validations: List[DataValidation] = []
+    conditional_formats: List[ConditionalFormat] = []
+    pivot_tables: List[PivotTableDefinition] = []
+
+
+# ─────────────────────────────────────────────────────────────
+# Stage 9: Dependency Graph
+# ─────────────────────────────────────────────────────────────
+
+class GraphNode(BaseModel):
+    address: str
+    role: CellRole
+    formula: Optional[str] = None
+    in_degree: int = 0
+    out_degree: int = 0
+    depth: int = 0
+    cluster: Optional[str] = None
+
+
+class Edge(BaseModel):
+    source: str
+    target: str
+    edge_type: str = "direct"
+
+
+class CalculationCluster(BaseModel):
+    id: str
+    inputs: List[str] = []
+    outputs: List[str] = []
+    intermediates: List[str] = []
+    semantic_purpose: Optional[str] = None
+
+
+class CircularRef(BaseModel):
+    cycle: List[str] = []
+    ref_type: str = "error"
+    max_iterations: Optional[int] = None
+    convergence_threshold: Optional[float] = None
+
+
+class DependencyGraph(BaseModel):
+    nodes: Dict[str, GraphNode] = {}
+    edges: List[Edge] = []
+    execution_order: List[str] = []
+    clusters: List[CalculationCluster] = []
+    circular_refs: List[CircularRef] = []
+
+
+# ─────────────────────────────────────────────────────────────
+# Stage 10: Business Logic Extraction
+# ─────────────────────────────────────────────────────────────
+
+class ParsedFormula(BaseModel):
+    raw: str
+    ast: Any = None
+    functions: List[str] = []
+    references: List[str] = []
+    constants: List[Any] = []
+    semantic_type: Optional[SemanticType] = None
+
+
+class RuleInput(BaseModel):
+    name: str
+    data_type: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RuleOutput(BaseModel):
+    name: str
+    data_type: Optional[str] = None
+    description: Optional[str] = None
+
+
+class LogicRepresentation(BaseModel):
+    pseudocode: str = ""
+    typescript: str = ""
+    validation: str = ""
+
+
+class TestCase(BaseModel):
+    name: str
+    inputs: Dict[str, Any] = {}
+    expected: Dict[str, Any] = {}
+
+
+class BusinessRule(BaseModel):
+    id: str
+    name: str
+    description: str
+    inputs: List[RuleInput] = []
+    outputs: List[RuleOutput] = []
+    logic: LogicRepresentation = LogicRepresentation()
+    constraints: List[str] = []
+    test_cases: List[TestCase] = []
+
+
+class CalculationUnit(BaseModel):
+    id: str
+    name: str
+    formulas: List[ParsedFormula] = []
+    inputs: List[str] = []
+    outputs: List[str] = []
+
+
+class LookupTable(BaseModel):
+    name: str
+    source_range: str
+    key_column: Optional[str] = None
+    columns: List[str] = []
+    row_count: int = 0
+
+
+class PivotDefinition(BaseModel):
+    source_range: str
+    rows: List[str] = []
+    columns: List[str] = []
+    values: List[str] = []
+
+
+class UIHint(BaseModel):
+    name: str
+    condition: str
+    action: str
+    severity: str = "info"
+
+
+class UnsupportedFeature(BaseModel):
+    feature_type: str
+    cell_address: str
+    formula: str
+    explanation: str
+    suggested_fix: str
+
+
+class LogicExtractionResult(BaseModel):
+    business_rules: List[BusinessRule] = []
+    calculations: List[CalculationUnit] = []
+    lookup_tables: List[LookupTable] = []
+    pivot_definitions: List[PivotDefinition] = []
+    ui_hints: List[UIHint] = []
+    unsupported_features: List[UnsupportedFeature] = []
+    test_suite: List[TestCase] = []
+
+
+class AppGenerationContext(BaseModel):
+    cell_classification: CellClassificationResult
+    logic_extraction: LogicExtractionResult
+
+
+# ─────────────────────────────────────────────────────────────
+# Stage 11: Code Generation
+# ─────────────────────────────────────────────────────────────
+
+class GeneratedProject(BaseModel):
+    files: Dict[str, str] = {}
+    dependencies: Dict[str, str] = {}
+    prisma_schema: str = ""
+    test_suite: List[TestCase] = []
+
+
+# ─────────────────────────────────────────────────────────────
+# Stage 12: Scaffold & Deploy
+# ─────────────────────────────────────────────────────────────
+
+class TestFailure(BaseModel):
+    name: str
+    message: str
+
+
+class TestResults(BaseModel):
+    passed: int = 0
+    failed: int = 0
+    failures: List[TestFailure] = []
+
+
+class GenerationReport(BaseModel):
+    total_inputs: int = 0
+    total_outputs: int = 0
+    business_rules: int = 0
+    unsupported_features: List[UnsupportedFeature] = []
+    manual_review_required: List[str] = []
+
+
+class ScaffoldResult(BaseModel):
+    project_path: str
+    github_url: str
+    deployment_url: str
+    database_url: str
+    test_results: TestResults
+    generation_report: GenerationReport
 
