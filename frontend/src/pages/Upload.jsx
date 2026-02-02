@@ -151,7 +151,7 @@ const Upload = () => {
                   onChange={(e) => setGenerateApp(e.target.checked)}
                   className="h-4 w-4 rounded border-brand-border bg-transparent text-brand-accent focus:ring-brand-accent"
                 />
-                Generate a web app from these Excel files
+                GENESIS MODE
               </label>
             )}
 
