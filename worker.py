@@ -64,6 +64,9 @@ def update_job_in_db(job_id: str, updates: dict):
 
 app = FastAPI(title="Tragaldabas Pipeline Worker")
 
+# Log deploy metadata if available
+print("Worker commit:", os.getenv("RAILWAY_GIT_COMMIT_SHA"), flush=True)
+
 # CORS - allow calls from Vercel and Edge Functions
 app.add_middleware(
     CORSMiddleware,
