@@ -1,6 +1,7 @@
 """LLM prompt templates for various tasks"""
 
 import json
+import re
 from typing import Dict, Any
 from core.interfaces import LLMTask
 
@@ -48,7 +49,7 @@ Respond with JSON only:
     def parse_response(self, response: str) -> Dict[str, Any]:
         """Parse classification response"""
         clean = self._clean_json_response(response)
-        return json.loads(clean)
+        return self._robust_json_load(clean, response)
 
 
 class StructurePrompt(LLMTask):
@@ -117,7 +118,7 @@ Respond with JSON only:
     def parse_response(self, response: str) -> Dict[str, Any]:
         """Parse structure inference response"""
         clean = self._clean_json_response(response)
-        return json.loads(clean)
+        return self._robust_json_load(clean, response)
 
 
 class ArchaeologyPrompt(LLMTask):
@@ -193,7 +194,7 @@ Respond with JSON only. No markdown, no explanation outside JSON:
     def parse_response(self, response: str) -> Dict[str, Any]:
         """Parse archaeology response"""
         clean = self._clean_json_response(response)
-        return json.loads(clean)
+        return self._robust_json_load(clean, response)
 
 
 class AnalysisPrompt(LLMTask):
@@ -251,7 +252,7 @@ Respond with JSON:
     def parse_response(self, response: str) -> Dict[str, Any]:
         """Parse analysis response"""
         clean = self._clean_json_response(response)
-        return json.loads(clean)
+        return self._robust_json_load(clean, response)
 
 
 class InsightsPrompt(LLMTask):
@@ -301,7 +302,7 @@ Respond with JSON:
     def parse_response(self, response: str) -> Dict[str, Any]:
         """Parse insights response"""
         clean = self._clean_json_response(response)
-        return json.loads(clean)
+        return self._robust_json_load(clean, response)
     
     def _clean_json_response(self, response: str) -> str:
         """Clean JSON response from markdown or extra text"""
@@ -324,8 +325,46 @@ Respond with JSON:
         
         return clean.strip()
 
+    def _robust_json_load(self, primary: str, fallback: str) -> Dict[str, Any]:
+        """Best-effort JSON parsing with recovery steps."""
+        def _strip_trailing_commas(text: str) -> str:
+            return re.sub(r",\s*([}\]])", r"\1", text)
+
+        def _balanced_json(text: str) -> str:
+            start = text.find("{")
+            if start == -1:
+                return text
+            depth = 0
+            for idx in range(start, len(text)):
+                char = text[idx]
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:idx + 1]
+            return text[start:]
+
+        attempts = [
+            primary,
+            _strip_trailing_commas(primary),
+            _balanced_json(primary),
+            _strip_trailing_commas(_balanced_json(primary)),
+            _balanced_json(fallback),
+            _strip_trailing_commas(_balanced_json(fallback)),
+        ]
+        last_error = None
+        for candidate in attempts:
+            try:
+                return json.loads(candidate)
+            except Exception as exc:
+                last_error = exc
+                continue
+        raise last_error or json.JSONDecodeError("Invalid JSON", primary, 0)
+
 
 # Add helper method to all prompt classes
 for cls in [ClassificationPrompt, StructurePrompt, ArchaeologyPrompt, AnalysisPrompt, InsightsPrompt]:
     cls._clean_json_response = InsightsPrompt._clean_json_response
+    cls._robust_json_load = InsightsPrompt._robust_json_load
 
