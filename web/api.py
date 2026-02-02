@@ -295,7 +295,7 @@ class WebUserPrompt:
 logger = logging.getLogger(__name__)
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer),
 ) -> dict:
     """Get current user from Supabase Auth"""
     logger.error(f"Credentials type: {type(credentials)}, value: {credentials}")

@@ -14,11 +14,11 @@ const STAGES = [
   { num: 5, name: 'Transmuting', description: 'Reprofiling schemas and transforming data' },
   { num: 6, name: 'Exsiccating', description: 'Abstracting insights' },
   { num: 7, name: 'Excreting elixir', description: 'Materializing posterior deliverables' },
-  { num: 8, name: 'Cell Classification', description: 'Cataloging inputs and outputs' },
-  { num: 9, name: 'Dependency Graph', description: 'Mapping formula relationships' },
-  { num: 10, name: 'Logic Extraction', description: 'Deriving calculation logic' },
-  { num: 11, name: 'Code Generation', description: 'Designing UI and calculations' },
-  { num: 12, name: 'Scaffold & Deploy', description: 'Assembling the generated app' },
+  { num: 8, name: 'Cell cytokinesis', description: 'Characterizing stimulus–response mappings' },
+  { num: 9, name: 'Trophic linking', description: 'Regenerating relationships' },
+  { num: 10, name: 'Structure encephalization', description: 'Evolving intelligence' },
+  { num: 11, name: 'Phylogenetic expansion', description: 'Designing UI and calculations' },
+  { num: 12, name: 'Speciation', description: 'Assembling the generated app' },
 ]
 
 const Pipeline = () => {
@@ -31,6 +31,8 @@ const Pipeline = () => {
   const [genesisInput, setGenesisInput] = useState('')
   const [genesisError, setGenesisError] = useState('')
   const [genesisLoading, setGenesisLoading] = useState(false)
+  const [retryLoading, setRetryLoading] = useState(false)
+  const [retryError, setRetryError] = useState('')
 
   useEffect(() => {
     fetchJob()
@@ -149,6 +151,26 @@ const Pipeline = () => {
     }
   }
 
+  const handleRetry = async () => {
+    try {
+      setRetryError('')
+      setRetryLoading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      await axios.post(`/api/pipeline/jobs/${jobId}/retry`, {}, { headers })
+      fetchJob()
+      startPolling()
+    } catch (error) {
+      console.error('Failed to retry job:', error)
+      setRetryError(error?.response?.data?.detail || 'Retry failed.')
+    } finally {
+      setRetryLoading(false)
+    }
+  }
+
   const getStageStatus = (stageNum) => {
     if (!job || job.status === 'pending') {
       return stageNum === 0 ? 'pending' : 'waiting'
@@ -208,6 +230,18 @@ const Pipeline = () => {
         {job?.status === 'failed' && (
           <div className="card mb-6 bg-error-bg border border-error-text/20">
             <p className="text-error-text">Pipeline failed: {job.error || 'Unknown error'}</p>
+            {retryError && (
+              <p className="text-error-text mt-2">{retryError}</p>
+            )}
+            <div className="mt-4">
+              <button
+                className="btn-secondary"
+                onClick={handleRetry}
+                disabled={retryLoading}
+              >
+                {retryLoading ? 'Retrying...' : 'Retry'}
+              </button>
+            </div>
           </div>
         )}
 

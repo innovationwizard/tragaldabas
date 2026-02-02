@@ -7,6 +7,8 @@ import Layout from '../components/Layout'
 const Dashboard = () => {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [retryingId, setRetryingId] = useState(null)
+  const [retryErrors, setRetryErrors] = useState({})
 
   useEffect(() => {
     fetchJobs()
@@ -51,6 +53,28 @@ const Dashboard = () => {
     return status === 'completed' ? 'Digested' : status
   }
 
+  const handleRetry = async (jobId) => {
+    try {
+      setRetryErrors((prev) => ({ ...prev, [jobId]: '' }))
+      setRetryingId(jobId)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      await axios.post(`/api/pipeline/jobs/${jobId}/retry`, {}, { headers })
+      fetchJobs()
+    } catch (error) {
+      console.error('Failed to retry job:', error)
+      setRetryErrors((prev) => ({
+        ...prev,
+        [jobId]: error?.response?.data?.detail || 'Retry failed.'
+      }))
+    } finally {
+      setRetryingId(null)
+    }
+  }
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -75,9 +99,8 @@ const Dashboard = () => {
         ) : (
           <div className="space-y-4">
             {jobs.map((job) => (
-              <Link
+              <div
                 key={job.id}
-                to={job.status === 'completed' ? `/results/${job.id}` : `/pipeline/${job.id}`}
                 className="card block hover:border-brand-primary transition-colors"
               >
                 <div className="flex justify-between items-start">
@@ -91,9 +114,39 @@ const Dashboard = () => {
                     <span className={`font-medium ${getStatusColor(job.status)}`}>
                       {formatStatus(job.status)}
                     </span>
+                    {retryErrors[job.id] && (
+                      <p className="text-error-text text-xs mt-2">{retryErrors[job.id]}</p>
+                    )}
+                    {job.status === 'failed' && (
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button
+                          className="btn-secondary text-xs px-3 py-1"
+                          onClick={() => handleRetry(job.id)}
+                          disabled={retryingId === job.id}
+                        >
+                          {retryingId === job.id ? 'Retrying...' : 'Retry'}
+                        </button>
+                        <Link
+                          to={`/pipeline/${job.id}`}
+                          className="btn-secondary text-xs px-3 py-1"
+                        >
+                          View
+                        </Link>
+                      </div>
+                    )}
+                    {job.status !== 'failed' && (
+                      <div className="mt-2 flex justify-end">
+                        <Link
+                          to={job.status === 'completed' ? `/results/${job.id}` : `/pipeline/${job.id}`}
+                          className="btn-secondary text-xs px-3 py-1"
+                        >
+                          View
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
