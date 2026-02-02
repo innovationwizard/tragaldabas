@@ -3,6 +3,7 @@
 import pandas as pd
 from pathlib import Path
 from typing import List
+import openpyxl
 
 from core.models import (
     ReceptionResult, FileMetadata, SheetPreview
@@ -11,6 +12,7 @@ from core.enums import FileType
 from core.exceptions import FileParseError
 from .base import FileParser
 from utils.encoding import detect_encoding
+from config import settings
 
 
 class ExcelParser(FileParser):
@@ -32,7 +34,6 @@ class ExcelParser(FileParser):
             raise FileParseError(f"File not found: {file_path}", file_path)
         
         try:
-            excel_file = pd.ExcelFile(path)
             file_size = path.stat().st_size
             
             # Determine file type
@@ -48,39 +49,71 @@ class ExcelParser(FileParser):
                 file_type=file_type,
                 file_size_bytes=file_size,
                 encoding=None,
-                sheets=excel_file.sheet_names
+                sheets=[]
             )
             
             # Parse each sheet
             previews = []
             raw_data = {}
             
-            for sheet_name in excel_file.sheet_names:
-                # Read without header assumption
-                df = pd.read_excel(
-                    excel_file,
-                    sheet_name=sheet_name,
-                    header=None,
-                    dtype=str,
-                    keep_default_na=False
-                )
+            if file_type == FileType.EXCEL_XLSX and settings.ETL_INPUTS_ONLY:
+                workbook = openpyxl.load_workbook(path, data_only=False, read_only=True)
+                metadata.sheets = workbook.sheetnames
+
+                for sheet_name in workbook.sheetnames:
+                    sheet = workbook[sheet_name]
+                    max_row = sheet.max_row or 0
+                    max_col = sheet.max_column or 0
+                    rows = []
+                    for row in sheet.iter_rows(min_row=1, max_row=max_row, max_col=max_col):
+                        values = []
+                        for cell in row:
+                            if cell.data_type == "f":
+                                values.append("")
+                            else:
+                                values.append("" if cell.value is None else str(cell.value))
+                        rows.append(values)
+                    df = pd.DataFrame(rows)
+
+                    col_letters = self._generate_column_letters(len(df.columns))
+                    preview_rows = df.head(50).values.tolist()
+
+                    preview = SheetPreview(
+                        sheet_name=sheet_name,
+                        row_count=len(df),
+                        col_count=len(df.columns),
+                        preview_rows=preview_rows,
+                        column_letters=col_letters
+                    )
+
+                    previews.append(preview)
+                    raw_data[sheet_name] = df
+            else:
+                excel_file = pd.ExcelFile(path)
+                metadata.sheets = excel_file.sheet_names
+
+                for sheet_name in excel_file.sheet_names:
+                    df = pd.read_excel(
+                        excel_file,
+                        sheet_name=sheet_name,
+                        header=None,
+                        dtype=str,
+                        keep_default_na=False
+                    )
                 
-                # Generate column letters (Excel style)
-                col_letters = self._generate_column_letters(len(df.columns))
-                
-                # Get preview rows
-                preview_rows = df.head(50).values.tolist()
-                
-                preview = SheetPreview(
-                    sheet_name=sheet_name,
-                    row_count=len(df),
-                    col_count=len(df.columns),
-                    preview_rows=preview_rows,
-                    column_letters=col_letters
-                )
-                
-                previews.append(preview)
-                raw_data[sheet_name] = df
+                    col_letters = self._generate_column_letters(len(df.columns))
+                    preview_rows = df.head(50).values.tolist()
+
+                    preview = SheetPreview(
+                        sheet_name=sheet_name,
+                        row_count=len(df),
+                        col_count=len(df.columns),
+                        preview_rows=preview_rows,
+                        column_letters=col_letters
+                    )
+
+                    previews.append(preview)
+                    raw_data[sheet_name] = df
             
             return ReceptionResult(
                 metadata=metadata,

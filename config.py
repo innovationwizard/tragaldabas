@@ -60,6 +60,9 @@ class Settings(BaseSettings):
 
     # Excel-to-web-app generator (Stages 8-12)
     EXCEL_APP_GENERATION_ENABLED: bool = False
+
+    # ETL-only parsing behavior
+    ETL_INPUTS_ONLY: bool = False
     
     class Config:
         env_file = ".env"

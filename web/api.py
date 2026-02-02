@@ -1214,6 +1214,8 @@ async def run_etl_job(job_id: str, file_path: str, user_id: str):
             from core.enums import Domain
             return Domain.FINANCIAL
 
+    previous_etl_flag = settings.ETL_INPUTS_ONLY
+    settings.ETL_INPUTS_ONLY = True
     try:
         progress = WebProgressTracker(job_id)
         prompt = WebUserPrompt(job_id)
@@ -1231,6 +1233,8 @@ async def run_etl_job(job_id: str, file_path: str, user_id: str):
             "etl_error": error_msg
         })
         raise
+    finally:
+        settings.ETL_INPUTS_ONLY = previous_etl_flag
 
 
 @app.post("/api/pipeline/process/{job_id}")
