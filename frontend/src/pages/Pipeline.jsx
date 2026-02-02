@@ -15,10 +15,10 @@ const STAGES = [
   { num: 6, name: 'Exsiccating', description: 'Abstracting insights' },
   { num: 7, name: 'Excreting elixir', description: 'Materializing posterior deliverables' },
   { num: 8, name: 'Cell cytokinesis', description: 'Characterizing stimulus–response mappings' },
-  { num: 9, name: 'Trophic linking', description: 'Regenerating relationships' },
+  { num: 9, name: 'Trophic linking', description: 'Regenerating entanglements' },
   { num: 10, name: 'Structure encephalization', description: 'Evolving intelligence' },
-  { num: 11, name: 'Phylogenetic expansion', description: 'Designing UI and calculations' },
-  { num: 12, name: 'Speciation', description: 'Assembling the generated app' },
+  { num: 11, name: 'Phylogenetic expansion', description: 'Catalyzing matrix accretion' },
+  { num: 12, name: 'Speciation', description: 'Eclosioning new breed' },
 ]
 
 const Pipeline = () => {

@@ -51,6 +51,7 @@ const Dashboard = () => {
 
   const formatStatus = (status) => {
     return status === 'completed' ? 'Digested' : status
+    return status === 'failed' ? 'aborted' : status
   }
 
   const handleRetry = async (jobId) => {
