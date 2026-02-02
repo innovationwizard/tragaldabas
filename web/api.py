@@ -257,6 +257,10 @@ class GenesisRequest(BaseModel):
     confirmation: str
 
 
+class BatchEtlRequest(BaseModel):
+    database_url: str
+
+
 # Note: WebProgressTracker and WebUserPrompt are defined inside run_pipeline()
 # to inherit from ProgressTracker and UserPrompt (lazy imports)
 
@@ -444,13 +448,14 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="No files provided")
 
     job_ids: List[str] = []
+    batch_id = str(uuid.uuid4()) if len(upload_files) > 1 else None
     
     # Upload file to Supabase Storage (persistent, accessible from Railway worker)
     # Files in Vercel /tmp are ephemeral and not accessible from Railway
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase client not initialized")
 
-    for upload_file in upload_files:
+    for index, upload_file in enumerate(upload_files):
         job_id = str(uuid.uuid4())
         try:
             content = await upload_file.read()
@@ -484,6 +489,9 @@ async def upload_file(
             "questions": [],
             "storage_path": storage_path,
             "app_generation": bool(app_generation and is_excel),
+            "batch_id": batch_id,
+            "batch_order": index if batch_id else None,
+            "batch_total": len(upload_files) if batch_id else None,
         }
 
         create_job_in_db(job_data)
@@ -534,6 +542,8 @@ async def upload_file(
     }
     if len(job_ids) == 1:
         response_payload["job_id"] = job_ids[0]
+    if batch_id:
+        response_payload["batch_id"] = batch_id
     return response_payload
 
 
@@ -594,6 +604,94 @@ async def retry_job(
         import traceback
         print(traceback.format_exc(), flush=True)
         raise HTTPException(status_code=500, detail=f"Failed to retry job: {str(e)}")
+
+
+@app.get("/api/pipeline/batches/{batch_id}")
+async def get_batch(batch_id: str, user: dict = Depends(get_current_user)):
+    """Get ordered jobs for a batch."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+    response = (
+        supabase.table("pipeline_jobs")
+        .select("*")
+        .eq("user_id", user.get("id"))
+        .eq("batch_id", batch_id)
+        .order("batch_order", desc=False)
+        .execute()
+    )
+    if hasattr(response, "error") and response.error:
+        raise HTTPException(status_code=500, detail=str(response.error))
+    return {"jobs": response.data or []}
+
+
+@app.post("/api/pipeline/batches/{batch_id}/etl")
+async def trigger_batch_etl(
+    batch_id: str,
+    payload: BatchEtlRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Trigger ETL load for a batch in order."""
+    from config import settings
+    import httpx
+
+    if not payload.database_url or not payload.database_url.strip():
+        raise HTTPException(status_code=400, detail="Database URL is required")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+
+    response = (
+        supabase.table("pipeline_jobs")
+        .select("*")
+        .eq("user_id", user.get("id"))
+        .eq("batch_id", batch_id)
+        .order("batch_order", desc=False)
+        .execute()
+    )
+    if hasattr(response, "error") and response.error:
+        raise HTTPException(status_code=500, detail=str(response.error))
+
+    jobs = response.data or []
+    if not jobs:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    for job in jobs:
+        status = job.get("status")
+        if status not in {"completed", "awaiting_genesis"}:
+            raise HTTPException(status_code=409, detail=f"Job {job.get('id')} not ready for ETL")
+
+    for job in jobs:
+        await update_job_in_db(job["id"], {
+            "etl_status": "pending",
+            "etl_error": None,
+            "etl_target_db_url": payload.database_url.strip(),
+        })
+
+    edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
+    try:
+        import httpx
+        print(f"🧪 Triggering ETL for batch {batch_id}", flush=True)
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            for job in jobs:
+                response = await client.post(
+                    edge_function_url,
+                    json={"job_id": job["id"], "mode": "etl"},
+                    headers={
+                        "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                )
+                if response.status_code != 200:
+                    error_text = await response.text()
+                    raise HTTPException(status_code=500, detail=f"Failed to trigger ETL: {error_text}")
+        return {"message": "ETL triggered", "batch_id": batch_id, "job_ids": [job["id"] for job in jobs]}
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Edge Function call timed out")
+    except Exception as e:
+        print(f"❌ Error triggering ETL for batch {batch_id}: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        raise HTTPException(status_code=500, detail=f"Failed to trigger ETL: {str(e)}")
 
 
 @app.post("/api/pipeline/jobs/{job_id}/genesis")
@@ -1040,6 +1138,101 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
         raise
 
 
+async def run_etl_job(job_id: str, file_path: str, user_id: str):
+    """Run ETL-only pipeline to populate app database."""
+    print(f"🧪 run_etl_job() CALLED for job {job_id}, file: {file_path}", flush=True)
+    from orchestrator import Orchestrator
+    from ui.progress import ProgressTracker
+    from ui.prompts import UserPrompt
+    from config import settings
+
+    if not supabase:
+        raise RuntimeError("Supabase client not initialized")
+
+    job = get_job_from_db(job_id) or {}
+    target_db_url = job.get("etl_target_db_url")
+    if not target_db_url:
+        raise RuntimeError("Missing ETL target database URL")
+
+    batch_id = job.get("batch_id")
+    batch_order = job.get("batch_order")
+    if batch_id and isinstance(batch_order, int) and batch_order > 0:
+        while True:
+            response = (
+                supabase.table("pipeline_jobs")
+                .select("id,etl_status,etl_error,batch_order")
+                .eq("batch_id", batch_id)
+                .lt("batch_order", batch_order)
+                .execute()
+            )
+            prev_jobs = response.data or []
+            if any(prev.get("etl_status") == "failed" for prev in prev_jobs):
+                raise RuntimeError("Previous ETL job in batch failed")
+            if all(prev.get("etl_status") == "completed" for prev in prev_jobs):
+                break
+            await asyncio.sleep(2)
+
+    class WebProgressTracker(ProgressTracker):
+        def __init__(self, job_id: str):
+            super().__init__()
+            self.job_id = job_id
+            self.current_stage = None
+            self.stage_name = None
+
+        async def start_stage(self, stage_num: int, stage_name: str):
+            self.current_stage = stage_num
+            self.stage_name = stage_name
+            await update_job_in_db(self.job_id, {
+                "etl_status": "running",
+                "etl_started_at": datetime.utcnow().isoformat(),
+            })
+
+        async def complete_stage(self, stage_num: int):
+            return
+
+        async def fail(self, stage_num: int, error: str):
+            await update_job_in_db(self.job_id, {
+                "etl_status": "failed",
+                "etl_error": error
+            })
+
+        async def complete(self):
+            await update_job_in_db(self.job_id, {
+                "etl_status": "completed",
+                "etl_completed_at": datetime.utcnow().isoformat()
+            })
+
+    class WebUserPrompt(UserPrompt):
+        def __init__(self, job_id: str):
+            super().__init__()
+            self.job_id = job_id
+
+        async def yes_no(self, question: str) -> bool:
+            return True
+
+        async def select_domain(self):
+            from core.enums import Domain
+            return Domain.FINANCIAL
+
+    try:
+        progress = WebProgressTracker(job_id)
+        prompt = WebUserPrompt(job_id)
+        orchestrator = Orchestrator(
+            progress=progress,
+            prompt=prompt,
+            db_connection_string=target_db_url
+        )
+        ctx = await orchestrator.run_etl_only(file_path)
+        await update_job_in_db(job_id, {"etl_result": serialize_model(ctx.etl)})
+    except Exception as e:
+        error_msg = str(e)
+        await update_job_in_db(job_id, {
+            "etl_status": "failed",
+            "etl_error": error_msg
+        })
+        raise
+
+
 @app.post("/api/pipeline/process/{job_id}")
 async def process_job(
     job_id: str,
@@ -1172,10 +1365,10 @@ async def process_job(
             await run_genesis_pipeline(job_id, str(file_path), user_id)
             print(f"✅ process_job() run_genesis_pipeline() returned for job {job_id}", flush=True)
         else:
-            print(f"📞 process_job() calling run_pipeline() for job {job_id}", flush=True)
-            app_generation = bool(job.get("app_generation", False))
-            await run_pipeline(job_id, str(file_path), user_id, app_generation)
-            print(f"✅ process_job() run_pipeline() returned for job {job_id}", flush=True)
+        print(f"📞 process_job() calling run_pipeline() for job {job_id}", flush=True)
+        app_generation = bool(job.get("app_generation", False))
+        await run_pipeline(job_id, str(file_path), user_id, app_generation)
+        print(f"✅ process_job() run_pipeline() returned for job {job_id}", flush=True)
         return {"message": "Job processed successfully", "job_id": job_id}
     except HTTPException:
         raise
@@ -1185,6 +1378,101 @@ async def process_job(
         print(f"Error processing job {job_id}: {error_msg}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to process job: {error_msg}")
+
+
+@app.post("/api/pipeline/etl/{job_id}")
+async def process_etl_job(
+    job_id: str,
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer)
+):
+    """Process ETL job to load original Excel data into app database."""
+    job = get_job_from_db(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    user_id = None
+    is_service_call = False
+
+    if credentials and hasattr(credentials, 'credentials') and credentials.credentials:
+        token = credentials.credentials
+        try:
+            if supabase:
+                user_response = supabase.auth.get_user(token)
+                if user_response.user:
+                    user_id = user_response.user.id
+        except Exception:
+            if token == settings.SUPABASE_SERVICE_ROLE_KEY:
+                is_service_call = True
+            else:
+                raise HTTPException(status_code=401, detail="Invalid token")
+    else:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    if not is_service_call and user_id and job.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if job.get("etl_status") in {"running", "completed"}:
+        return {"message": f"ETL already {job.get('etl_status')}", "job_id": job_id}
+
+    if not job.get("etl_target_db_url"):
+        raise HTTPException(status_code=400, detail="Missing ETL target database URL")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+
+    filename = job.get("filename")
+    storage_path = job.get("storage_path")
+
+    if not filename:
+        raise HTTPException(status_code=400, detail="Job filename not found")
+
+    if not storage_path:
+        job_user_id = job.get("user_id")
+        storage_path = f"{job_user_id}/{job_id}/{filename}"
+        print(f"⚠️ Storage path not in job data, reconstructing: {storage_path}", flush=True)
+
+    try:
+        print(f"📥 Downloading file for ETL: {storage_path}", flush=True)
+        file_response = supabase.storage.from_("uploads").download(storage_path)
+        if file_response is None:
+            raise Exception("File data is None - file may not exist in Storage")
+        if isinstance(file_response, bytes):
+            file_data = file_response
+        elif hasattr(file_response, 'read'):
+            file_data = file_response.read()
+        else:
+            file_data = file_response
+        if not file_data:
+            raise Exception("File data is empty")
+
+        output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
+        local_upload_dir = Path(output_dir) / "uploads" / job_id
+        local_upload_dir.mkdir(parents=True, exist_ok=True)
+        file_path = local_upload_dir / filename
+        with open(file_path, "wb") as f:
+            f.write(file_data)
+        print(f"✅ File downloaded and saved to: {file_path}", flush=True)
+    except Exception as e:
+        import traceback
+        error_msg = f"Failed to download file from Supabase Storage: {str(e)}"
+        print(f"❌ {error_msg}", flush=True)
+        print(traceback.format_exc(), flush=True)
+        await update_job_in_db(job_id, {
+            "etl_status": "failed",
+            "etl_error": error_msg
+        })
+        raise HTTPException(status_code=404, detail=error_msg)
+
+    try:
+        await run_etl_job(job_id, str(file_path), job.get("user_id"))
+        return {"message": "ETL processed successfully", "job_id": job_id}
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        print(f"Error processing ETL job {job_id}: {error_msg}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to process ETL job: {error_msg}")
 
 
 @app.get("/api/pipeline/jobs")

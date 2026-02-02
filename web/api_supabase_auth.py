@@ -268,8 +268,9 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="No files provided")
 
     job_ids: List[str] = []
+    batch_id = str(uuid.uuid4()) if len(upload_files) > 1 else None
     
-    for upload_file in upload_files:
+    for index, upload_file in enumerate(upload_files):
         job_id = str(uuid.uuid4())
 
         upload_dir = Path(settings.OUTPUT_DIR) / "uploads" / job_id
@@ -286,7 +287,10 @@ async def upload_file(
             "filename": upload_file.filename,
             "status": "pending",
             "created_at": datetime.utcnow().isoformat(),
-            "questions": []
+            "questions": [],
+            "batch_id": batch_id,
+            "batch_order": index if batch_id else None,
+            "batch_total": len(upload_files) if batch_id else None,
         }
         
         asyncio.create_task(run_pipeline(job_id, str(file_path), user_id))
@@ -295,6 +299,8 @@ async def upload_file(
     response_payload = {"job_ids": job_ids, "status": "started"}
     if len(job_ids) == 1:
         response_payload["job_id"] = job_ids[0]
+    if batch_id:
+        response_payload["batch_id"] = batch_id
     return response_payload
 
 

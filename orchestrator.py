@@ -126,6 +126,29 @@ class Orchestrator:
             if hasattr(fail_result, '__await__'):
                 await fail_result
             raise PipelineError(f"Pipeline failed at stage {e.stage}: {e}", stage=e.stage)
+
+    async def run_etl_only(self, file_path: str) -> PipelineContext:
+        """Execute stages 0-5 to load data into a target database."""
+        ctx = PipelineContext(file_path=file_path)
+        try:
+            ctx.reception = await self._execute_stage(0, file_path)
+            ctx.classification = await self._execute_stage(1, ctx.reception)
+
+            if ctx.classification.primary_type == ContentType.NARRATIVE:
+                ctx = await self._narrative_path(ctx)
+            else:
+                ctx = await self._structured_path(ctx)
+
+            complete_result = self.progress.complete()
+            if hasattr(complete_result, '__await__'):
+                await complete_result
+
+            return ctx
+        except StageError as e:
+            fail_result = self.progress.fail(e.stage, str(e))
+            if hasattr(fail_result, '__await__'):
+                await fail_result
+            raise PipelineError(f"Pipeline failed at stage {e.stage}: {e}", stage=e.stage)
     
     async def _structured_path(self, ctx: PipelineContext) -> PipelineContext:
         """Process structured data (Excel, CSV)"""

@@ -19,7 +19,17 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
     questions JSONB,
     result JSONB,
     error TEXT,
-    storage_path TEXT  -- Path in Supabase Storage (e.g., "user_id/job_id/filename")
+    storage_path TEXT,  -- Path in Supabase Storage (e.g., "user_id/job_id/filename")
+    app_generation BOOLEAN DEFAULT FALSE,
+    batch_id TEXT,
+    batch_order INTEGER,
+    batch_total INTEGER,
+    etl_status TEXT,
+    etl_target_db_url TEXT,
+    etl_error TEXT,
+    etl_result JSONB,
+    etl_started_at TIMESTAMP,
+    etl_completed_at TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_user_id ON pipeline_jobs(user_id);

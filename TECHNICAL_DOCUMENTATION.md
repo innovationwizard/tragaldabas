@@ -629,6 +629,16 @@ Stage 12: Scaffold & Deploy
 - `completed_stages`: Integer array
 - `questions`: JSON array (user prompts)
 - `storage_path`: String (Supabase Storage path)
+- `app_generation`: Boolean
+- `batch_id`: String (group id for multi-file uploads)
+- `batch_order`: Integer (ordering within batch)
+- `batch_total`: Integer (batch size)
+- `etl_status`: String (pending, running, completed, failed)
+- `etl_target_db_url`: String (target database connection for ETL)
+- `etl_error`: String (ETL error message)
+- `etl_result`: JSON (ETL output metadata)
+- `etl_started_at`: Timestamp
+- `etl_completed_at`: Timestamp
 - `result`: JSON (pipeline results)
 - `error`: String (error message if failed)
 - `created_at`: Timestamp

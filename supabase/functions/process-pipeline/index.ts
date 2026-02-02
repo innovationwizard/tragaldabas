@@ -39,7 +39,7 @@ serve(async (req) => {
       )
     }
     
-    const { job_id } = requestBody
+    const { job_id, mode } = requestBody
 
     if (!job_id) {
       return new Response(
@@ -63,7 +63,7 @@ serve(async (req) => {
     }
 
     // Check if job is already processing or completed
-    if (job.status !== 'pending' && job.status !== 'failed' && job.status !== 'pending_genesis') {
+    if (mode !== 'etl' && job.status !== 'pending' && job.status !== 'failed' && job.status !== 'pending_genesis') {
       return new Response(
         JSON.stringify({ message: `Job already ${job.status}`, job_id }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -82,9 +82,13 @@ serve(async (req) => {
       const baseUrl = WORKER_URL.startsWith('http') 
         ? WORKER_URL.replace(/\/$/, '') 
         : `https://${WORKER_URL.replace(/\/$/, '')}`
-      processingUrl = `${baseUrl}/process/${job_id}`
+      processingUrl = mode === 'etl'
+        ? `${baseUrl}/etl/${job_id}`
+        : `${baseUrl}/process/${job_id}`
     } else {
-      processingUrl = `${VERCEL_API_URL}/api/pipeline/process/${job_id}`
+      processingUrl = mode === 'etl'
+        ? `${VERCEL_API_URL}/api/pipeline/etl/${job_id}`
+        : `${VERCEL_API_URL}/api/pipeline/process/${job_id}`
     }
     
     console.log(`Calling processing endpoint: ${processingUrl}`)

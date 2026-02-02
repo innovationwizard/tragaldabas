@@ -40,6 +40,18 @@ def get_process_job():
         print(traceback.format_exc(), flush=True)
         raise
 
+
+def get_process_etl_job():
+    """Lazy import process_etl_job to avoid startup crashes"""
+    try:
+        from web.api import process_etl_job
+        return process_etl_job
+    except ImportError as e:
+        print(f"❌ Failed to import process_etl_job: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        raise
+
 def get_job_from_db(job_id: str):
     """Lazy import get_job_from_db"""
     from web.api import get_job_from_db as _get_job_from_db
@@ -202,6 +214,35 @@ async def worker_process(
         print(f"Worker error processing job {job_id}: {error_msg}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to process job: {error_msg}")
+
+
+@app.post("/etl/{job_id}")
+async def worker_etl(
+    job_id: str,
+    request: Request,
+    api_key: str = Depends(verify_railway_api_key)
+):
+    """Run ETL-only load for a job."""
+    print(f"✅ ETL authentication successful for job {job_id}", flush=True)
+
+    from fastapi.security import HTTPAuthorizationCredentials
+    mock_credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer",
+        credentials=settings.SUPABASE_SERVICE_ROLE_KEY
+    )
+
+    try:
+        print(f"🚀 Starting ETL processing for job {job_id}", flush=True)
+        process_etl_func = get_process_etl_job()
+        result = await process_etl_func(job_id, request, mock_credentials)
+        print(f"✅ ETL completed successfully for job {job_id}", flush=True)
+        return result
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        print(f"Worker error processing ETL job {job_id}: {error_msg}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to process ETL job: {error_msg}")
 
 
 if __name__ == "__main__":

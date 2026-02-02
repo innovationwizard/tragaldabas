@@ -10,6 +10,12 @@ const Results = () => {
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  const [batchJobs, setBatchJobs] = useState([])
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [showEtlModal, setShowEtlModal] = useState(false)
+  const [etlDbUrl, setEtlDbUrl] = useState('')
+  const [etlError, setEtlError] = useState('')
+  const [etlLoading, setEtlLoading] = useState(false)
   
   // Helper to safely render chip text (handles objects, strings, trash, etc.)
   const chipText = (v) =>
@@ -18,6 +24,12 @@ const Results = () => {
   useEffect(() => {
     fetchJob()
   }, [jobId])
+
+  useEffect(() => {
+    if (job?.batch_id) {
+      fetchBatchJobs(job.batch_id)
+    }
+  }, [job?.batch_id])
 
   const fetchJob = async () => {
     try {
@@ -33,6 +45,48 @@ const Results = () => {
       console.error('Failed to fetch job:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchBatchJobs = async (batchId) => {
+    try {
+      setBatchLoading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      const response = await axios.get(`/api/pipeline/batches/${batchId}`, { headers })
+      setBatchJobs(response.data.jobs || [])
+    } catch (error) {
+      console.error('Failed to fetch batch jobs:', error)
+    } finally {
+      setBatchLoading(false)
+    }
+  }
+
+  const handleEtlTrigger = async () => {
+    setEtlError('')
+    if (!etlDbUrl.trim()) {
+      setEtlError('Database URL is required.')
+      return
+    }
+    try {
+      setEtlLoading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      await axios.post(`/api/pipeline/batches/${job.batch_id}/etl`, { database_url: etlDbUrl.trim() }, { headers })
+      setShowEtlModal(false)
+      setEtlDbUrl('')
+      fetchBatchJobs(job.batch_id)
+    } catch (error) {
+      console.error('Failed to trigger ETL:', error)
+      setEtlError(error?.response?.data?.detail || 'Failed to trigger ETL.')
+    } finally {
+      setEtlLoading(false)
     }
   }
 
@@ -120,6 +174,35 @@ const Results = () => {
                     </p>
                   </div>
                 </div>
+                {job.batch_id && (
+                  <div className="mt-6 card bg-brand-bg">
+                    <h3 className="font-semibold mb-2">ETL for Original Data</h3>
+                    <p className="text-brand-muted text-sm mb-3">
+                      Populate the deployed app database using the original Excel data.
+                    </p>
+                    {batchLoading ? (
+                      <p className="text-brand-muted text-sm">Loading batch files...</p>
+                    ) : (
+                      <div className="space-y-2 text-sm text-brand-text">
+                        {batchJobs.map((batchJob, idx) => (
+                          <div key={batchJob.id} className="flex items-center justify-between">
+                            <span>{idx + 1}. {batchJob.filename}</span>
+                            {batchJob.etl_status && (
+                              <span className="text-brand-muted">{batchJob.etl_status}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      className="btn-primary mt-4"
+                      onClick={() => setShowEtlModal(true)}
+                      disabled={!batchJobs.length}
+                    >
+                      Run ETL to App Database
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -332,6 +415,45 @@ const Results = () => {
           </div>
         </div>
       </div>
+      {showEtlModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="card w-full max-w-lg">
+            <h2 className="text-xl font-semibold mb-2">ETL to App Database</h2>
+            <p className="text-brand-muted text-sm mb-4">
+              Provide the target database URL for the deployed app.
+            </p>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border border-brand-border rounded bg-brand-bg text-brand-text mb-2"
+              placeholder="postgresql://user:pass@host:5432/db"
+              value={etlDbUrl}
+              onChange={(e) => setEtlDbUrl(e.target.value)}
+            />
+            {etlError && (
+              <p className="text-error-text text-sm mb-2">{etlError}</p>
+            )}
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowEtlModal(false)
+                  setEtlDbUrl('')
+                  setEtlError('')
+                }}
+              >
+                CANCEL
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleEtlTrigger}
+                disabled={etlLoading}
+              >
+                {etlLoading ? 'Starting...' : 'Start ETL'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }
