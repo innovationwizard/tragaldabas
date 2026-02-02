@@ -473,6 +473,7 @@ class LogicExtractionResult(BaseModel):
 class AppGenerationContext(BaseModel):
     cell_classification: CellClassificationResult
     logic_extraction: LogicExtractionResult
+    dependency_graph: DependencyGraph
 
 
 # ─────────────────────────────────────────────────────────────

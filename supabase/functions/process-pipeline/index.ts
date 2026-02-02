@@ -63,7 +63,7 @@ serve(async (req) => {
     }
 
     // Check if job is already processing or completed
-    if (job.status !== 'pending' && job.status !== 'failed') {
+    if (job.status !== 'pending' && job.status !== 'failed' && job.status !== 'pending_genesis') {
       return new Response(
         JSON.stringify({ message: `Job already ${job.status}`, job_id }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }

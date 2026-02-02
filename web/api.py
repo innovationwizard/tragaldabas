@@ -147,6 +147,98 @@ def list_user_jobs_from_db(user_id: str) -> List[Dict[str, Any]]:
         return []
 
 
+def serialize_model(model):
+    """Convert pipeline models to JSON-serializable structures."""
+    if model is None:
+        return None
+
+    from datetime import datetime, date
+    import math
+    import pandas as pd
+    import numpy as np
+
+    if isinstance(model, (datetime, date)):
+        return model.isoformat()
+
+    if isinstance(model, float):
+        if math.isnan(model):
+            return None
+        if math.isinf(model):
+            return "infinity" if model > 0 else "-infinity"
+        return model
+
+    if isinstance(model, pd.DataFrame):
+        sample_data = []
+        if len(model) > 0:
+            sample_df = model.head(10)
+            sample_dicts = sample_df.to_dict(orient='records')
+            for row in sample_dicts:
+                cleaned_row = {}
+                for key, value in row.items():
+                    if pd.isna(value) or (isinstance(value, float) and math.isnan(value)):
+                        cleaned_row[key] = None
+                    elif isinstance(value, float) and math.isinf(value):
+                        cleaned_row[key] = "infinity" if value > 0 else "-infinity"
+                    else:
+                        cleaned_row[key] = serialize_model(value)
+                sample_data.append(cleaned_row)
+        return {
+            "_type": "DataFrame",
+            "shape": model.shape,
+            "columns": model.columns.tolist(),
+            "sample": sample_data
+        }
+
+    if isinstance(model, dict):
+        result = {}
+        for key, value in model.items():
+            if isinstance(value, pd.DataFrame):
+                sample_data = []
+                if len(value) > 0:
+                    sample_df = value.head(10)
+                    sample_dicts = sample_df.to_dict(orient='records')
+                    for row in sample_dicts:
+                        cleaned_row = {}
+                        for k, v in row.items():
+                            if pd.isna(v) or (isinstance(v, float) and math.isnan(v)):
+                                cleaned_row[k] = None
+                            elif isinstance(v, float) and math.isinf(v):
+                                cleaned_row[k] = "infinity" if v > 0 else "-infinity"
+                            else:
+                                cleaned_row[k] = serialize_model(v)
+                        sample_data.append(cleaned_row)
+                result[key] = {
+                    "_type": "DataFrame",
+                    "shape": value.shape,
+                    "columns": value.columns.tolist(),
+                    "sample": sample_data
+                }
+            elif isinstance(value, (datetime, date)):
+                result[key] = value.isoformat()
+            elif isinstance(value, float):
+                if math.isnan(value):
+                    result[key] = None
+                elif math.isinf(value):
+                    result[key] = "infinity" if value > 0 else "-infinity"
+                else:
+                    result[key] = value
+            else:
+                result[key] = serialize_model(value)
+        return result
+
+    if isinstance(model, list):
+        return [serialize_model(item) for item in model]
+
+    if hasattr(model, 'model_dump'):
+        dumped = model.model_dump()
+        return serialize_model(dumped)
+    if hasattr(model, 'dict'):
+        dumped = model.dict()
+        return serialize_model(dumped)
+
+    return model
+
+
 # Pydantic models for request validation
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -158,6 +250,10 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str  # Changed from email to username
     password: str
+
+
+class GenesisRequest(BaseModel):
+    confirmation: str
 
 
 # Note: WebProgressTracker and WebUserPrompt are defined inside run_pipeline()
@@ -482,6 +578,66 @@ async def retry_job(
         raise HTTPException(status_code=500, detail=f"Failed to retry job: {str(e)}")
 
 
+@app.post("/api/pipeline/jobs/{job_id}/genesis")
+async def trigger_genesis(
+    job_id: str,
+    payload: GenesisRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Trigger app generation stages after stage 7."""
+    from config import settings
+    import httpx
+
+    job = get_job_from_db(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.get("user_id") != user.get("id"):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if job.get("status") != "awaiting_genesis":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job status {job.get('status')} does not allow genesis"
+        )
+
+    confirmation = (payload.confirmation or "").strip().lower()
+    if confirmation not in {"y", "yes"}:
+        raise HTTPException(status_code=400, detail="Confirmation must be 'y' or 'yes'")
+
+    await update_job_in_db(job_id, {
+        "status": "pending_genesis",
+        "error": None
+    })
+
+    edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
+
+    try:
+        print(f"🧬 Triggering Genesis for job {job_id}", flush=True)
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                edge_function_url,
+                json={"job_id": job_id},
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                    "Content-Type": "application/json"
+                }
+            )
+            if response.status_code != 200:
+                error_text = await response.text()
+                print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
+                raise HTTPException(status_code=500, detail=f"Failed to trigger genesis: {error_text}")
+            print(f"✅ Genesis triggered successfully for job {job_id}", flush=True)
+            return {"message": "Genesis triggered", "job_id": job_id}
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Edge Function call timed out")
+    except Exception as e:
+        print(f"❌ Error triggering genesis for job {job_id}: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        raise HTTPException(status_code=500, detail=f"Failed to trigger genesis: {str(e)}")
+
+
 async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation: bool):
     """Run pipeline in background - lazy imports to reduce serverless function size"""
     print(f"🎯 run_pipeline() CALLED for job {job_id}, file: {file_path}", flush=True)
@@ -495,12 +651,20 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
     class WebProgressTracker(ProgressTracker):
         """Polling-based progress tracker - stores progress in Supabase database"""
         
-        def __init__(self, job_id: str, final_stage: int):
+        def __init__(
+            self,
+            job_id: str,
+            final_stage: int,
+            completion_status: str = "completed",
+            completion_stage_name: Optional[str] = None,
+        ):
             super().__init__()
             self.job_id = job_id
             self.current_stage = None
             self.stage_name = None
             self.final_stage = final_stage
+            self.completion_status = completion_status
+            self.completion_stage_name = completion_stage_name
         
         async def start_stage(self, stage_num: int, stage_name: str):
             self.current_stage = stage_num
@@ -532,10 +696,13 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
             # Update job status in database
             print(f"🔔 WebProgressTracker.complete() called for job {self.job_id}", flush=True)
             try:
+                stage_name = self.completion_stage_name
+                if not stage_name:
+                    stage_name = "Output" if self.final_stage == 7 else "Scaffold & Deploy"
                 await update_job_in_db(self.job_id, {
-                    "status": "completed",
+                    "status": self.completion_status,
                     "current_stage": self.final_stage,
-                    "current_stage_name": "Output" if self.final_stage == 7 else "Scaffold & Deploy"
+                    "current_stage_name": stage_name
                 })
                 print(f"✅ WebProgressTracker.complete() finished for job {self.job_id}", flush=True)
             except Exception as e:
@@ -577,9 +744,15 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
         # Update job status to running
         await update_job_in_db(job_id, {"status": "running"})
         
-        settings.EXCEL_APP_GENERATION_ENABLED = bool(app_generation)
-        final_stage = 12 if app_generation else 7
-        progress = WebProgressTracker(job_id, final_stage)
+        settings.EXCEL_APP_GENERATION_ENABLED = False
+        final_stage = 7
+        completion_status = "awaiting_genesis" if app_generation else "completed"
+        progress = WebProgressTracker(
+            job_id,
+            final_stage,
+            completion_status=completion_status,
+            completion_stage_name="Output",
+        )
         prompt = WebUserPrompt(job_id)
         
         orchestrator = Orchestrator(
@@ -591,107 +764,6 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
         print(f"🚀 Calling orchestrator.run() for job {job_id}", flush=True)
         ctx = await orchestrator.run(file_path)
         print(f"✅ orchestrator.run() completed for job {job_id}", flush=True)
-        
-        # Convert Pydantic models to dict (works for both v1 and v2)
-        def to_dict(model):
-            if model is None:
-                return None
-            
-            # Handle datetime objects - convert to ISO format string
-            from datetime import datetime, date
-            import math
-            import pandas as pd
-            import numpy as np
-            if isinstance(model, (datetime, date)):
-                return model.isoformat()
-            
-            # Handle special float values (NaN, infinity) - convert to None or string
-            if isinstance(model, float):
-                if math.isnan(model):
-                    return None
-                elif math.isinf(model):
-                    return "infinity" if model > 0 else "-infinity"
-                return model
-            
-            # Handle DataFrames - convert to serializable format
-            if isinstance(model, pd.DataFrame):
-                # Convert DataFrame sample to dict, handling NaN values
-                sample_data = []
-                if len(model) > 0:
-                    sample_df = model.head(10)
-                    # Convert to dict and replace NaN with None
-                    sample_dicts = sample_df.to_dict(orient='records')
-                    for row in sample_dicts:
-                        cleaned_row = {}
-                        for key, value in row.items():
-                            if pd.isna(value) or (isinstance(value, float) and math.isnan(value)):
-                                cleaned_row[key] = None
-                            elif isinstance(value, float) and math.isinf(value):
-                                cleaned_row[key] = "infinity" if value > 0 else "-infinity"
-                            else:
-                                cleaned_row[key] = to_dict(value)  # Recursively handle nested values
-                        sample_data.append(cleaned_row)
-                
-                return {
-                    "_type": "DataFrame",
-                    "shape": model.shape,
-                    "columns": model.columns.tolist(),
-                    "sample": sample_data
-                }
-            
-            # Handle dicts that might contain DataFrames, datetimes, or NaN values
-            if isinstance(model, dict):
-                result = {}
-                for key, value in model.items():
-                    if isinstance(value, pd.DataFrame):
-                        # Convert DataFrame sample to dict, handling NaN values
-                        sample_data = []
-                        if len(value) > 0:
-                            sample_df = value.head(10)
-                            sample_dicts = sample_df.to_dict(orient='records')
-                            for row in sample_dicts:
-                                cleaned_row = {}
-                                for k, v in row.items():
-                                    if pd.isna(v) or (isinstance(v, float) and math.isnan(v)):
-                                        cleaned_row[k] = None
-                                    elif isinstance(v, float) and math.isinf(v):
-                                        cleaned_row[k] = "infinity" if v > 0 else "-infinity"
-                                    else:
-                                        cleaned_row[k] = to_dict(v)
-                                sample_data.append(cleaned_row)
-                        
-                        result[key] = {
-                            "_type": "DataFrame",
-                            "shape": value.shape,
-                            "columns": value.columns.tolist(),
-                            "sample": sample_data
-                        }
-                    elif isinstance(value, (datetime, date)):
-                        result[key] = value.isoformat()
-                    elif isinstance(value, float):
-                        if math.isnan(value):
-                            result[key] = None
-                        elif math.isinf(value):
-                            result[key] = "infinity" if value > 0 else "-infinity"
-                        else:
-                            result[key] = value
-                    else:
-                        result[key] = to_dict(value)
-                return result
-            
-            # Handle lists that might contain DataFrames, datetimes, or NaN values
-            if isinstance(model, list):
-                return [to_dict(item) for item in model]
-            
-            # Handle Pydantic models
-            if hasattr(model, 'model_dump'):
-                dumped = model.model_dump()
-                return to_dict(dumped)  # Recursively handle nested DataFrames/datetimes/NaN
-            elif hasattr(model, 'dict'):
-                dumped = model.dict()
-                return to_dict(dumped)  # Recursively handle nested DataFrames/datetimes/NaN
-            
-            return model
         
         # Upload output files to Supabase Storage before converting to dict
         output_storage_paths = {}
@@ -750,34 +822,35 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
                 # Don't fail the job if upload fails - files are still available locally
         
         # Convert output to dict and add storage paths
-        output_dict = to_dict(ctx.output)
+        output_dict = serialize_model(ctx.output)
         if output_dict and output_storage_paths:
             output_dict.update(output_storage_paths)
         
         result = {
-            "reception": to_dict(ctx.reception),
-            "classification": to_dict(ctx.classification),
-            "structure": to_dict(ctx.structure),
-            "archaeology": to_dict(ctx.archaeology),
-            "reconciliation": to_dict(ctx.reconciliation),
-            "etl": to_dict(ctx.etl),
-            "analysis": to_dict(ctx.analysis),
+            "reception": serialize_model(ctx.reception),
+            "classification": serialize_model(ctx.classification),
+            "structure": serialize_model(ctx.structure),
+            "archaeology": serialize_model(ctx.archaeology),
+            "reconciliation": serialize_model(ctx.reconciliation),
+            "etl": serialize_model(ctx.etl),
+            "analysis": serialize_model(ctx.analysis),
             "output": output_dict,
-            "cell_classification": to_dict(ctx.cell_classification),
-            "dependency_graph": to_dict(ctx.dependency_graph),
-            "logic_extraction": to_dict(ctx.logic_extraction),
-            "generated_project": to_dict(ctx.generated_project),
-            "scaffold": to_dict(ctx.scaffold),
+            "cell_classification": serialize_model(ctx.cell_classification),
+            "dependency_graph": serialize_model(ctx.dependency_graph),
+            "logic_extraction": serialize_model(ctx.logic_extraction),
+            "generated_project": serialize_model(ctx.generated_project),
+            "scaffold": serialize_model(ctx.scaffold),
         }
         
         # Update job with completed status and result
+        status_value = "awaiting_genesis" if app_generation else "completed"
         print(f"💾 Updating job {job_id} to completed status with result", flush=True)
         try:
             await update_job_in_db(job_id, {
-                "status": "completed",
+                "status": status_value,
                 "result": result
             })
-            print(f"✅ Successfully updated job {job_id} to completed", flush=True)
+            print(f"✅ Successfully updated job {job_id} to {status_value}", flush=True)
         except Exception as update_error:
             print(f"❌ CRITICAL: Failed to update job {job_id} to completed: {update_error}", flush=True)
             import traceback
@@ -796,8 +869,8 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
                 print(f"⚠️ Warning: Sanity check failed with error: {check_err}", flush=True)
             elif not check_data or len(check_data) == 0:
                 print(f"⚠️ Warning: Sanity check found no data for job {job_id}", flush=True)
-            elif check_data[0].get("status") != "completed":
-                print(f"⚠️ Warning: Sanity check shows status is '{check_data[0].get('status')}', expected 'completed'", flush=True)
+            elif check_data[0].get("status") != status_value:
+                print(f"⚠️ Warning: Sanity check shows status is '{check_data[0].get('status')}', expected '{status_value}'", flush=True)
         
         print(f"✅ Job {job_id} status updated to completed", flush=True)
         
@@ -836,6 +909,116 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
             import traceback
             print(traceback.format_exc(), flush=True)
             # Don't swallow - re-raise the original exception
+        raise
+
+
+async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
+    """Run app generation stages (8-12) after user confirmation."""
+    print(f"🧬 run_genesis_pipeline() CALLED for job {job_id}, file: {file_path}", flush=True)
+    from orchestrator import Orchestrator
+    from ui.progress import ProgressTracker
+    from ui.prompts import UserPrompt
+    from config import settings
+
+    class WebProgressTracker(ProgressTracker):
+        """Polling-based progress tracker for genesis stages."""
+
+        def __init__(self, job_id: str, final_stage: int):
+            super().__init__()
+            self.job_id = job_id
+            self.current_stage = None
+            self.stage_name = None
+            self.final_stage = final_stage
+
+        async def start_stage(self, stage_num: int, stage_name: str):
+            self.current_stage = stage_num
+            self.stage_name = stage_name
+            await update_job_in_db(self.job_id, {
+                "current_stage": stage_num,
+                "current_stage_name": stage_name
+            })
+
+        async def complete_stage(self, stage_num: int):
+            job = get_job_from_db(self.job_id)
+            if job:
+                completed = job.get("completed_stages", []) or []
+                if stage_num not in completed:
+                    completed.append(stage_num)
+                    await update_job_in_db(self.job_id, {"completed_stages": completed})
+
+        async def fail(self, stage_num: int, error: str):
+            await update_job_in_db(self.job_id, {
+                "status": "failed",
+                "error": error,
+                "failed_stage": stage_num
+            })
+
+        async def complete(self):
+            print(f"🔔 WebProgressTracker.complete() called for genesis job {self.job_id}", flush=True)
+            await update_job_in_db(self.job_id, {
+                "status": "completed",
+                "current_stage": self.final_stage,
+                "current_stage_name": "Scaffold & Deploy"
+            })
+
+    class WebUserPrompt(UserPrompt):
+        """Placeholder prompt for app generation stages."""
+
+        def __init__(self, job_id: str):
+            super().__init__()
+            self.job_id = job_id
+
+        async def yes_no(self, question: str) -> bool:
+            return True
+
+        async def select_domain(self):
+            from core.enums import Domain
+            return Domain.FINANCIAL
+
+    try:
+        await update_job_in_db(job_id, {"status": "genesis_running", "error": None})
+
+        progress = WebProgressTracker(job_id, 12)
+        prompt = WebUserPrompt(job_id)
+        orchestrator = Orchestrator(
+            progress=progress,
+            prompt=prompt,
+            db_connection_string=settings.DATABASE_URL
+        )
+
+        print(f"🚀 Calling orchestrator.run_app_generation() for job {job_id}", flush=True)
+        ctx = await orchestrator.run_app_generation(file_path)
+        print(f"✅ orchestrator.run_app_generation() completed for job {job_id}", flush=True)
+
+        genesis_result = {
+            "cell_classification": serialize_model(ctx.cell_classification),
+            "dependency_graph": serialize_model(ctx.dependency_graph),
+            "logic_extraction": serialize_model(ctx.logic_extraction),
+            "generated_project": serialize_model(ctx.generated_project),
+            "scaffold": serialize_model(ctx.scaffold),
+        }
+
+        existing = get_job_from_db(job_id) or {}
+        base_result = existing.get("result") if isinstance(existing, dict) else {}
+        if not isinstance(base_result, dict):
+            base_result = {}
+        base_result.update(genesis_result)
+
+        await update_job_in_db(job_id, {"status": "completed", "result": base_result})
+        print(f"✅ Job {job_id} updated with genesis results", flush=True)
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"❌ Genesis pipeline failed for job {job_id}: {error_msg}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        try:
+            await update_job_in_db(job_id, {
+                "status": "failed",
+                "error": error_msg
+            })
+        except Exception:
+            pass
         raise
 
 
@@ -879,7 +1062,7 @@ async def process_job(
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Check if already processing or completed
-    if job.get("status") not in ["pending", "failed"]:
+    if job.get("status") not in ["pending", "failed", "pending_genesis"]:
         print(f"⏭️ Skipping job {job_id}: status={job.get('status')}", flush=True)
         return {"message": f"Job already {job.get('status')}", "job_id": job_id}
     
@@ -965,10 +1148,16 @@ async def process_job(
                        "See docs/DEPLOYMENT.md for options."
             )
         
-        print(f"📞 process_job() calling run_pipeline() for job {job_id}", flush=True)
-        app_generation = bool(job.get("app_generation", False))
-        await run_pipeline(job_id, str(file_path), user_id, app_generation)
-        print(f"✅ process_job() run_pipeline() returned for job {job_id}", flush=True)
+        is_genesis = job.get("status") == "pending_genesis"
+        if is_genesis:
+            print(f"📞 process_job() calling run_genesis_pipeline() for job {job_id}", flush=True)
+            await run_genesis_pipeline(job_id, str(file_path), user_id)
+            print(f"✅ process_job() run_genesis_pipeline() returned for job {job_id}", flush=True)
+        else:
+            print(f"📞 process_job() calling run_pipeline() for job {job_id}", flush=True)
+            app_generation = bool(job.get("app_generation", False))
+            await run_pipeline(job_id, str(file_path), user_id, app_generation)
+            print(f"✅ process_job() run_pipeline() returned for job {job_id}", flush=True)
         return {"message": "Job processed successfully", "job_id": job_id}
     except HTTPException:
         raise

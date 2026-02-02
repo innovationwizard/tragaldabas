@@ -14,6 +14,11 @@ const STAGES = [
   { num: 5, name: 'Transmuting', description: 'Reprofiling schemas and transforming data' },
   { num: 6, name: 'Exsiccating', description: 'Abstracting insights' },
   { num: 7, name: 'Excreting elixir', description: 'Materializing posterior deliverables' },
+  { num: 8, name: 'Cell Classification', description: 'Cataloging inputs and outputs' },
+  { num: 9, name: 'Dependency Graph', description: 'Mapping formula relationships' },
+  { num: 10, name: 'Logic Extraction', description: 'Deriving calculation logic' },
+  { num: 11, name: 'Code Generation', description: 'Designing UI and calculations' },
+  { num: 12, name: 'Scaffold & Deploy', description: 'Assembling the generated app' },
 ]
 
 const Pipeline = () => {
@@ -22,6 +27,10 @@ const Pipeline = () => {
   const [currentStage, setCurrentStage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pollingInterval, setPollingInterval] = useState(null)
+  const [showGenesisModal, setShowGenesisModal] = useState(false)
+  const [genesisInput, setGenesisInput] = useState('')
+  const [genesisError, setGenesisError] = useState('')
+  const [genesisLoading, setGenesisLoading] = useState(false)
 
   useEffect(() => {
     fetchJob()
@@ -75,6 +84,8 @@ const Pipeline = () => {
         setTimeout(() => {
           window.location.href = `/results/${jobId}`
         }, 1000)
+      } else if (status.status === 'awaiting_genesis') {
+        fetchJob()
       } else if (status.status === 'failed') {
         if (pollingInterval) {
           clearInterval(pollingInterval)
@@ -97,7 +108,9 @@ const Pipeline = () => {
   const updateCurrentStage = (jobData) => {
     if (jobData.status === 'completed') {
       setCurrentStage({ num: 7, name: 'Excreting elixir' })
-    } else if (jobData.status === 'running') {
+    } else if (jobData.status === 'awaiting_genesis') {
+      setCurrentStage({ num: 7, name: 'Excreting elixir' })
+    } else if (jobData.status === 'running' || jobData.status === 'genesis_running') {
       // Use current_stage from job data if available
       if (jobData.current_stage !== null && jobData.current_stage !== undefined) {
         setCurrentStage({ 
@@ -107,6 +120,32 @@ const Pipeline = () => {
       } else {
         setCurrentStage({ num: 0, name: 'Snatching' })
       }
+    }
+  }
+
+  const handleGenesis = async () => {
+    setGenesisError('')
+    const normalized = genesisInput.trim().toLowerCase()
+    if (normalized !== 'y' && normalized !== 'yes') {
+      setGenesisError('Type "y" or "yes" to continue.')
+      return
+    }
+    try {
+      setGenesisLoading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      await axios.post(`/api/pipeline/jobs/${jobId}/genesis`, { confirmation: genesisInput }, { headers })
+      setShowGenesisModal(false)
+      setGenesisInput('')
+      fetchJob()
+    } catch (error) {
+      console.error('Failed to trigger genesis:', error)
+      setGenesisError(error?.response?.data?.detail || 'Failed to trigger genesis.')
+    } finally {
+      setGenesisLoading(false)
     }
   }
 
@@ -214,11 +253,65 @@ const Pipeline = () => {
           </div>
         </div>
 
+        {job?.status === 'awaiting_genesis' && job?.app_generation && (
+          <div className="mt-6 text-center">
+            <button
+              className="btn-primary"
+              onClick={() => setShowGenesisModal(true)}
+            >
+              GENESIS
+            </button>
+            <p className="text-brand-muted text-sm mt-2">
+              Continue into app generation stages (8-12).
+            </p>
+          </div>
+        )}
+
         {job?.status === 'completed' && (
           <div className="mt-6 text-center">
             <Link to={`/results/${jobId}`} className="btn-primary">
               View Results
             </Link>
+          </div>
+        )}
+
+        {showGenesisModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+            <div className="card w-full max-w-md">
+              <h2 className="text-xl font-semibold mb-2">Are you sure?</h2>
+              <p className="text-brand-muted text-sm mb-4">
+                Type "y" or "yes" to continue to the rest of the pipeline.
+              </p>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-brand-border rounded bg-brand-bg text-brand-text mb-2"
+                placeholder='Type "y" or "yes"'
+                value={genesisInput}
+                onChange={(e) => setGenesisInput(e.target.value)}
+              />
+              {genesisError && (
+                <p className="text-error-text text-sm mb-2">{genesisError}</p>
+              )}
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowGenesisModal(false)
+                    setGenesisInput('')
+                    setGenesisError('')
+                  }}
+                >
+                  CANCEL
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={handleGenesis}
+                  disabled={genesisLoading}
+                >
+                  {genesisLoading ? 'GENESIS...' : 'GENESIS'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
