@@ -1369,10 +1369,10 @@ async def process_job(
             await run_genesis_pipeline(job_id, str(file_path), user_id)
             print(f"✅ process_job() run_genesis_pipeline() returned for job {job_id}", flush=True)
         else:
-        print(f"📞 process_job() calling run_pipeline() for job {job_id}", flush=True)
-        app_generation = bool(job.get("app_generation", False))
-        await run_pipeline(job_id, str(file_path), user_id, app_generation)
-        print(f"✅ process_job() run_pipeline() returned for job {job_id}", flush=True)
+            print(f"📞 process_job() calling run_pipeline() for job {job_id}", flush=True)
+            app_generation = bool(job.get("app_generation", False))
+            await run_pipeline(job_id, str(file_path), user_id, app_generation)
+            print(f"✅ process_job() run_pipeline() returned for job {job_id}", flush=True)
         return {"message": "Job processed successfully", "job_id": job_id}
     except HTTPException:
         raise
