@@ -100,10 +100,10 @@ const Pipeline = () => {
   }
 
   const startPolling = () => {
-    // Poll every 2 seconds while job is running
+    // Poll every 5 seconds while job is running
     const interval = setInterval(() => {
       pollJobStatus()
-    }, 2000)
+    }, 5000)
     setPollingInterval(interval)
   }
 
