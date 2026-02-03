@@ -86,7 +86,7 @@ const Pipeline = () => {
         setTimeout(() => {
           window.location.href = `/results/${jobId}`
         }, 1000)
-      } else if (status.status === 'awaiting_genesis') {
+      } else if (status.status === 'awaiting_genesis' || status.status === 'ready_for_genesis') {
         fetchJob()
       } else if (status.status === 'failed') {
         if (pollingInterval) {
@@ -110,7 +110,7 @@ const Pipeline = () => {
   const updateCurrentStage = (jobData) => {
     if (jobData.status === 'completed') {
       setCurrentStage({ num: 7, name: 'Excreting elixir' })
-    } else if (jobData.status === 'awaiting_genesis') {
+    } else if (jobData.status === 'awaiting_genesis' || jobData.status === 'ready_for_genesis') {
       setCurrentStage({ num: 7, name: 'Excreting elixir' })
     } else if (jobData.status === 'running' || jobData.status === 'genesis_running') {
       // Use current_stage from job data if available
@@ -297,6 +297,13 @@ const Pipeline = () => {
             </button>
             <p className="text-brand-muted text-sm mt-2">
               Continue into app generation stages (8-12).
+            </p>
+          </div>
+        )}
+        {job?.status === 'ready_for_genesis' && job?.app_generation && (
+          <div className="mt-6 text-center">
+            <p className="text-brand-muted text-sm">
+              Waiting for all files in this batch to finish stage 7.
             </p>
           </div>
         )}

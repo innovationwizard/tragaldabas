@@ -10,6 +10,21 @@ const Dashboard = () => {
   const [retryingId, setRetryingId] = useState(null)
   const [retryErrors, setRetryErrors] = useState({})
 
+  const formatGuatemalaDateTime = (value) => {
+    if (!value) return ''
+    const date = new Date(value)
+    return date.toLocaleString('es-GT', {
+      timeZone: 'America/Guatemala',
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  }
+
   useEffect(() => {
     fetchJobs()
   }, [])
@@ -52,6 +67,17 @@ const Dashboard = () => {
   const formatStatus = (status) => {
     return status === 'completed' ? 'Digested' : status
     return status === 'failed' ? 'aborted' : status
+  }
+
+  const getGenesisHint = (job) => {
+    if (!job?.app_generation || !job?.batch_id) return ''
+    if (job.status === 'ready_for_genesis') {
+      return 'Waiting for batch to finish stage 7'
+    }
+    if (job.status === 'awaiting_genesis') {
+      return 'Batch ready — click GENESIS on any file'
+    }
+    return ''
   }
 
   const handleRetry = async (jobId) => {
@@ -108,8 +134,13 @@ const Dashboard = () => {
                   <div>
                     <h3 className="text-lg font-semibold mb-2">{job.filename}</h3>
                     <p className="text-brand-muted text-sm">
-                      Created: {new Date(job.created_at).toLocaleString()}
+                      Created: {formatGuatemalaDateTime(job.created_at)}
                     </p>
+                    {getGenesisHint(job) && (
+                      <p className="text-brand-muted text-xs mt-1">
+                        {getGenesisHint(job)}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <span className={`font-medium ${getStatusColor(job.status)}`}>

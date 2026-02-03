@@ -21,6 +21,21 @@ const Results = () => {
   const chipText = (v) =>
     typeof v === 'string' ? v : (v?.name ?? v?.label ?? v?.headline ?? JSON.stringify(v))
 
+  const formatGuatemalaDateTime = (value) => {
+    if (!value) return ''
+    const date = new Date(value)
+    return date.toLocaleString('es-GT', {
+      timeZone: 'America/Guatemala',
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  }
+
   useEffect(() => {
     fetchJob()
   }, [jobId])
@@ -100,7 +115,7 @@ const Results = () => {
     )
   }
 
-  if (!job || (job.status !== 'completed' && job.status !== 'awaiting_genesis')) {
+  if (!job || (job.status !== 'completed' && job.status !== 'awaiting_genesis' && job.status !== 'ready_for_genesis')) {
     return (
       <Layout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -164,13 +179,17 @@ const Results = () => {
                     <h3 className="font-semibold mb-2">File</h3>
                     <p className="text-brand-muted text-sm">Filename: {job.filename}</p>
                     <p className="text-brand-muted text-sm">
-                      Processed: {new Date(job.created_at).toLocaleString()}
+                      Processed: {formatGuatemalaDateTime(job.created_at)}
                     </p>
                   </div>
                   <div className="card bg-brand-bg">
                     <h3 className="font-semibold mb-2">Status</h3>
                     <p className="text-brand-primary">
-                      {job.status === 'awaiting_genesis' ? 'Genesis pending' : 'Digested'}
+                      {job.status === 'awaiting_genesis'
+                        ? 'Genesis pending'
+                        : job.status === 'ready_for_genesis'
+                          ? 'Waiting for batch readiness'
+                          : 'Digested'}
                     </p>
                   </div>
                 </div>

@@ -127,6 +127,28 @@ async def update_job_in_db(job_id: str, updates: Dict[str, Any]) -> None:
 
     print(f"✅ Job {job_id} updated", flush=True)
 
+async def promote_batch_to_awaiting_genesis(batch_id: Optional[str]) -> bool:
+    """Move all app_generation jobs in a batch to awaiting_genesis together."""
+    if not batch_id or not supabase:
+        return False
+    response = (
+        supabase.table("pipeline_jobs")
+        .select("id,status,app_generation")
+        .eq("batch_id", batch_id)
+        .execute()
+    )
+    if hasattr(response, "error") and response.error:
+        raise RuntimeError(f"Supabase error fetching batch {batch_id}: {response.error}")
+    jobs = response.data or []
+    app_jobs = [job for job in jobs if job.get("app_generation")]
+    if not app_jobs:
+        return False
+    if not all(job.get("status") == "ready_for_genesis" for job in app_jobs):
+        return False
+    for job in app_jobs:
+        await update_job_in_db(job["id"], {"status": "awaiting_genesis"})
+    return True
+
 def create_job_in_db(job_data: Dict[str, Any]):
     """Create job in Supabase database (synchronous)"""
     if not supabase:
@@ -721,12 +743,63 @@ async def trigger_genesis(
     if confirmation not in {"y", "yes"}:
         raise HTTPException(status_code=400, detail="Confirmation must be 'y' or 'yes'")
 
+    batch_id = job.get("batch_id")
+    edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
+
+    if batch_id:
+        response = (
+            supabase.table("pipeline_jobs")
+            .select("*")
+            .eq("user_id", user.get("id"))
+            .eq("batch_id", batch_id)
+            .order("batch_order", desc=False)
+            .execute()
+        )
+        if hasattr(response, "error") and response.error:
+            raise HTTPException(status_code=500, detail=str(response.error))
+        jobs = response.data or []
+        app_jobs = [j for j in jobs if j.get("app_generation")]
+        if not app_jobs:
+            raise HTTPException(status_code=409, detail="No app generation jobs in this batch")
+        if not all(j.get("status") == "awaiting_genesis" for j in app_jobs):
+            raise HTTPException(status_code=409, detail="Batch not ready for genesis")
+        for j in app_jobs:
+            await update_job_in_db(j["id"], {"status": "pending_genesis", "error": None})
+        try:
+            print(f"🧬 Triggering Genesis for batch {batch_id}", flush=True)
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                tasks = [
+                    client.post(
+                        edge_function_url,
+                        json={"job_id": j["id"]},
+                        headers={
+                            "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                            "Content-Type": "application/json"
+                        }
+                    )
+                    for j in app_jobs
+                ]
+                responses = await asyncio.gather(*tasks, return_exceptions=True)
+                for j, response in zip(app_jobs, responses):
+                    if isinstance(response, Exception):
+                        print(f"❌ Edge Function error for job {j['id']}: {response}", flush=True)
+                        continue
+                    if response.status_code != 200:
+                        error_text = await response.text()
+                        raise HTTPException(status_code=500, detail=f"Failed to trigger genesis: {error_text}")
+            return {"message": "Genesis triggered", "job_ids": [j["id"] for j in app_jobs], "batch_id": batch_id}
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Edge Function call timed out")
+        except Exception as e:
+            print(f"❌ Error triggering genesis for batch {batch_id}: {e}", flush=True)
+            import traceback
+            print(traceback.format_exc(), flush=True)
+            raise HTTPException(status_code=500, detail=f"Failed to trigger genesis: {str(e)}")
+
     await update_job_in_db(job_id, {
         "status": "pending_genesis",
         "error": None
     })
-
-    edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
 
     try:
         print(f"🧬 Triggering Genesis for job {job_id}", flush=True)
@@ -862,7 +935,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
         
         settings.EXCEL_APP_GENERATION_ENABLED = False
         final_stage = 7
-        completion_status = "awaiting_genesis" if app_generation else "completed"
+        completion_status = "ready_for_genesis" if app_generation else "completed"
         progress = WebProgressTracker(
             job_id,
             final_stage,
@@ -959,7 +1032,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
         }
         
         # Update job with completed status and result
-        status_value = "awaiting_genesis" if app_generation else "completed"
+        status_value = "ready_for_genesis" if app_generation else "completed"
         print(f"💾 Updating job {job_id} to completed status with result", flush=True)
         try:
             await update_job_in_db(job_id, {
@@ -988,6 +1061,11 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
             elif check_data[0].get("status") != status_value:
                 print(f"⚠️ Warning: Sanity check shows status is '{check_data[0].get('status')}', expected '{status_value}'", flush=True)
         
+        if app_generation:
+            if job.get("batch_id"):
+                await promote_batch_to_awaiting_genesis(job.get("batch_id"))
+            else:
+                await update_job_in_db(job_id, {"status": "awaiting_genesis"})
         print(f"✅ Job {job_id} status updated to completed", flush=True)
         
     except Exception as e:
