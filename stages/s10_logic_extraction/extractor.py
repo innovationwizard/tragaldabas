@@ -198,8 +198,14 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
 
         def apply_operator(op: str):
             if op == "UNARY_MINUS":
+                if not output:
+                    output.append({"type": "error", "operator": "-", "reason": "missing_operand"})
+                    return
                 right = output.pop()
                 output.append({"type": "unary", "operator": "-", "value": right})
+                return
+            if len(output) < 2:
+                output.append({"type": "error", "operator": op, "reason": "missing_operand"})
                 return
             right = output.pop()
             left = output.pop()

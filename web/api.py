@@ -1294,6 +1294,14 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
     from ui.progress import ProgressTracker
     from ui.prompts import UserPrompt
     from config import settings
+    from core.models import (
+        CellClassificationResult,
+        DependencyGraph,
+        LogicExtractionResult,
+        GeneratedProject,
+        ScaffoldResult,
+        AppGenerationContext,
+    )
 
     class WebProgressTracker(ProgressTracker):
         """Polling-based progress tracker for genesis stages."""
@@ -1350,6 +1358,13 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
             from core.enums import Domain
             return Domain.FINANCIAL
 
+    def _coerce_model(cls, data):
+        if data is None:
+            return None
+        if hasattr(cls, "model_validate"):
+            return cls.model_validate(data)
+        return cls(**data)
+
     try:
         await update_job_in_db(job_id, {"status": "genesis_running", "error": None})
 
@@ -1361,23 +1376,75 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
             db_connection_string=settings.DATABASE_URL
         )
 
-        print(f"🚀 Calling orchestrator.run_app_generation() for job {job_id}", flush=True)
-        ctx = await orchestrator.run_app_generation(file_path)
-        print(f"✅ orchestrator.run_app_generation() completed for job {job_id}", flush=True)
-
-        genesis_result = {
-            "cell_classification": serialize_model(ctx.cell_classification),
-            "dependency_graph": serialize_model(ctx.dependency_graph),
-            "logic_extraction": serialize_model(ctx.logic_extraction),
-            "generated_project": serialize_model(ctx.generated_project),
-            "scaffold": serialize_model(ctx.scaffold),
-        }
-
         existing = get_job_from_db(job_id) or {}
         base_result = existing.get("result") if isinstance(existing, dict) else {}
         if not isinstance(base_result, dict):
             base_result = {}
-        base_result.update(genesis_result)
+
+        completed = existing.get("completed_stages", []) or []
+
+        ctx = PipelineContext(file_path=file_path)
+        ctx.cell_classification = _coerce_model(
+            CellClassificationResult, base_result.get("cell_classification")
+        )
+        ctx.dependency_graph = _coerce_model(
+            DependencyGraph, base_result.get("dependency_graph")
+        )
+        ctx.logic_extraction = _coerce_model(
+            LogicExtractionResult, base_result.get("logic_extraction")
+        )
+        ctx.generated_project = _coerce_model(
+            GeneratedProject, base_result.get("generated_project")
+        )
+        ctx.scaffold = _coerce_model(ScaffoldResult, base_result.get("scaffold"))
+
+        async def _persist_stage_result():
+            base_result.update({
+                "cell_classification": serialize_model(ctx.cell_classification),
+                "dependency_graph": serialize_model(ctx.dependency_graph),
+                "logic_extraction": serialize_model(ctx.logic_extraction),
+                "generated_project": serialize_model(ctx.generated_project),
+                "scaffold": serialize_model(ctx.scaffold),
+            })
+            await update_job_in_db(job_id, {"result": base_result})
+
+        def _needs_stage(stage_num: int) -> bool:
+            if stage_num not in completed:
+                return True
+            if stage_num == 8 and ctx.cell_classification is None:
+                return True
+            if stage_num == 9 and ctx.dependency_graph is None:
+                return True
+            if stage_num == 10 and ctx.logic_extraction is None:
+                return True
+            if stage_num == 11 and ctx.generated_project is None:
+                return True
+            if stage_num == 12 and ctx.scaffold is None:
+                return True
+            return False
+
+        if _needs_stage(8):
+            ctx.cell_classification = await orchestrator._execute_stage(8, ctx.file_path)
+            await _persist_stage_result()
+        if _needs_stage(9):
+            ctx.dependency_graph = await orchestrator._execute_stage(9, ctx.cell_classification)
+            await _persist_stage_result()
+        if _needs_stage(10):
+            ctx.logic_extraction = await orchestrator._execute_stage(10, ctx.dependency_graph)
+            await _persist_stage_result()
+        if _needs_stage(11):
+            ctx.generated_project = await orchestrator._execute_stage(
+                11,
+                AppGenerationContext(
+                    cell_classification=ctx.cell_classification,
+                    logic_extraction=ctx.logic_extraction,
+                    dependency_graph=ctx.dependency_graph,
+                ),
+            )
+            await _persist_stage_result()
+        if _needs_stage(12):
+            ctx.scaffold = await orchestrator._execute_stage(12, ctx.generated_project)
+            await _persist_stage_result()
 
         await update_job_in_db(job_id, {"status": "completed", "result": base_result})
         print(f"✅ Job {job_id} updated with genesis results", flush=True)
