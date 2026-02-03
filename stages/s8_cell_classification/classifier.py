@@ -18,6 +18,9 @@ from core.models import (
     NamedRange,
     PivotTableDefinition,
     SheetClassification,
+    SheetSection,
+    InputGroup,
+    OutputGroup,
     VBAMacro,
     CellFormatting,
 )

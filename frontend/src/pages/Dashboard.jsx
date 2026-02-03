@@ -32,6 +32,10 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchJobs()
+    const interval = setInterval(() => {
+      fetchJobs()
+    }, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   const fetchJobs = async () => {
@@ -70,8 +74,12 @@ const Dashboard = () => {
   }
 
   const formatStatus = (status) => {
-    return status === 'completed' ? 'Digested' : status
-    return status === 'failed' ? 'aborted' : status
+    if (status === 'completed') return 'Digested'
+    if (status === 'awaiting_genesis') return 'Genesis pending'
+    if (status === 'ready_for_genesis') return 'Ready for Genesis'
+    if (status === 'genesis_running') return 'Genesis running'
+    if (status === 'failed') return 'Aborted'
+    return status
   }
 
   const getGenesisHint = (job) => {
