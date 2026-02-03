@@ -47,6 +47,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.requests import Request
 from typing import Optional
 import os
+import asyncio
 
 # Import the processing function from web.api
 import sys
@@ -259,7 +260,6 @@ async def worker_process(
             print(traceback.format_exc(), flush=True)
 
     # Fire and forget - start processing but return immediately
-    import asyncio
     asyncio.create_task(process_in_background())
 
     print(f"✅ Job {job_id} accepted and processing started in background", flush=True)
@@ -296,12 +296,10 @@ async def worker_etl(
             print(traceback.format_exc(), flush=True)
 
     # Fire and forget
-    import asyncio
     asyncio.create_task(process_etl_in_background())
 
     print(f"✅ ETL job {job_id} accepted and processing started in background", flush=True)
     return {"message": "ETL processing started", "job_id": job_id}
-        raise HTTPException(status_code=500, detail=f"Failed to process ETL job: {error_msg}")
 
 
 if __name__ == "__main__":
