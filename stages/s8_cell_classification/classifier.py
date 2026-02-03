@@ -107,6 +107,9 @@ class CellClassifier(Stage[str, CellClassificationResult]):
             if target_address not in cell_data:
                 # Parse address to extract sheet, row, and col
                 sheet_name, coord = target_address.split("!", 1)
+                # Skip range references (e.g., "A1:B10", "291:291", "A:A")
+                if ":" in coord:
+                    continue
                 row, col = coordinate_to_tuple(coord)
                 cell_data[target_address] = {
                     "value": None,
