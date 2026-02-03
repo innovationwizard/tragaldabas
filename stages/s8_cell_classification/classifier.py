@@ -319,9 +319,11 @@ class CellClassifier(Stage[str, CellClassificationResult]):
         font_color = None
         fill_color = None
         if cell.font and cell.font.color:
-            font_color = getattr(cell.font.color, "rgb", None)
+            rgb = getattr(cell.font.color, "rgb", None)
+            font_color = str(rgb) if rgb is not None else None
         if cell.fill and getattr(cell.fill, "fgColor", None):
-            fill_color = getattr(cell.fill.fgColor, "rgb", None)
+            rgb = getattr(cell.fill.fgColor, "rgb", None)
+            fill_color = str(rgb) if rgb is not None else None
 
         return CellFormatting(
             number_format=cell.number_format,
