@@ -1295,6 +1295,7 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
     from ui.prompts import UserPrompt
     from config import settings
     from core.models import (
+        PipelineContext,
         CellClassificationResult,
         DependencyGraph,
         LogicExtractionResult,
