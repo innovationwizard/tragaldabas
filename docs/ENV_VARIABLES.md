@@ -16,6 +16,12 @@ OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o  # Optional, defaults shown
 ```
 
+### Audio Transcription (optional)
+```env
+AUDIO_TRANSCRIPTION_MODEL=whisper-1
+AUDIO_TRANSCRIPTION_LANGUAGE=  # Optional, leave blank for auto-detect
+```
+
 ### Google Gemini
 ```env
 GOOGLE_API_KEY=your-google-api-key

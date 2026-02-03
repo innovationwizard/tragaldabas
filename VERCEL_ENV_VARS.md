@@ -69,6 +69,13 @@ GEMINI_MODEL_ID=gemini-2.5-pro
 GEMINI_FALLBACK_MODEL_ID=gemini-2.5-flash
 ```
 
+### Audio Transcription (Optional)
+
+```env
+AUDIO_TRANSCRIPTION_MODEL=whisper-1
+AUDIO_TRANSCRIPTION_LANGUAGE=
+```
+
 ### Output Directory / Storage
 
 **Option 1: Supabase Storage (Recommended for Vercel)**

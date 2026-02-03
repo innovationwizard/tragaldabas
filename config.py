@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 3
     LLM_RETRY_DELAY: float = 2.0  # seconds
     LLM_TIMEOUT: float = 60.0  # seconds
+
+    # Audio transcription (Stage 0 for audio uploads)
+    AUDIO_TRANSCRIPTION_MODEL: str = "whisper-1"
+    AUDIO_TRANSCRIPTION_LANGUAGE: Optional[str] = None  # e.g., "es"
     
     # Database
     DATABASE_URL: Optional[str] = None

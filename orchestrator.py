@@ -73,6 +73,14 @@ class Orchestrator:
         try:
             # Stage 0: Reception
             ctx.reception = await self._execute_stage(0, file_path)
+
+            # Audio language confirmation (optional)
+            if ctx.reception and ctx.reception.metadata.file_type == FileType.AUDIO:
+                detected = ctx.reception.metadata.transcript_language
+                if detected:
+                    language, confirmed = await self.prompt.confirm_language(detected)
+                    ctx.reception.metadata.transcript_language_confirmed = confirmed
+                    ctx.reception.metadata.transcript_language = language
             
             # Stage 1: Classification
             ctx.classification = await self._execute_stage(1, ctx.reception)

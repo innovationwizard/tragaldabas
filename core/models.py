@@ -23,6 +23,9 @@ class FileMetadata(BaseModel):
     encoding: Optional[str] = None
     sheets: list[str] = []  # For Excel
     page_count: Optional[int] = None  # For Word
+    audio_duration_seconds: Optional[float] = None  # For audio
+    transcript_language: Optional[str] = None  # For audio transcripts
+    transcript_language_confirmed: Optional[bool] = None  # For audio transcripts
 
 
 class SheetPreview(BaseModel):

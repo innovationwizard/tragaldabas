@@ -21,15 +21,23 @@ const Upload = () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/vnd.ms-excel',
       'text/csv',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'audio/mpeg',
+      'audio/wav',
+      'audio/x-wav',
+      'audio/mp4',
+      'audio/aac',
+      'audio/ogg',
+      'audio/flac',
+      'audio/webm'
     ]
 
     const invalid = selectedFiles.find((item) => (
-      !validTypes.includes(item.type) && !item.name.match(/\.(xlsx|xls|csv|docx)$/i)
+      !validTypes.includes(item.type) && !item.name.match(/\.(xlsx|xls|csv|docx|mp3|wav|m4a|flac|ogg|webm)$/i)
     ))
 
     if (invalid) {
-      setError('Invalid file type. Please upload Excel, CSV, or Word documents.')
+      setError('Invalid file type. Please upload Excel, CSV, Word, or audio files.')
       return
     }
 
@@ -111,7 +119,7 @@ const Upload = () => {
                 <input
                   type="file"
                   onChange={handleFileChange}
-                  accept=".xlsx,.xls,.csv,.docx"
+                  accept=".xlsx,.xls,.csv,.docx,.mp3,.wav,.m4a,.flac,.ogg,.webm"
                   multiple
                   className="hidden"
                   id="file-input"

@@ -1,6 +1,7 @@
 """User interaction prompts"""
 
 from abc import ABC, abstractmethod
+from typing import Optional, Tuple
 from core.enums import Domain
 
 
@@ -16,6 +17,15 @@ class UserPrompt(ABC):
     async def select_domain(self) -> Domain:
         """Select domain"""
         pass
+
+    async def confirm_language(self, detected: str) -> Tuple[Optional[str], bool]:
+        """Confirm detected language, optionally override."""
+        confirmed = await self.yes_no(
+            f"Detected transcript language '{detected}'. Is this correct?"
+        )
+        if confirmed:
+            return detected, True
+        return None, False
 
 
 class ConsolePrompt(UserPrompt):
@@ -47,4 +57,15 @@ class ConsolePrompt(UserPrompt):
                     print("Invalid choice")
             except ValueError:
                 print("Please enter a number")
+
+    async def confirm_language(self, detected: str) -> Tuple[Optional[str], bool]:
+        confirmed = await self.yes_no(
+            f"Detected transcript language '{detected}'. Is this correct?"
+        )
+        if confirmed:
+            return detected, True
+        typed = input("Enter language (e.g., Spanish, English): ").strip()
+        if typed:
+            return typed, True
+        return None, False
 

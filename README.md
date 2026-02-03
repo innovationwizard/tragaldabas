@@ -9,7 +9,7 @@ Transform raw files into actionable business intelligence.
 ## Features
 
 - **7-Stage Pipeline**: Reception → Classification → Structure → Archaeology → Reconciliation → ETL → Analysis → Output
-- **Multi-Format Support**: Excel (.xlsx, .xls), CSV, Word (.docx)
+- **Multi-Format Support**: Excel (.xlsx, .xls), CSV, Word (.docx), Audio (.mp3, .wav, .m4a, .flac, .ogg, .webm)
 - **LLM-Powered**: Multi-provider support (Claude, OpenAI, Gemini) with automatic fallback
 - **Data Archaeology**: Automatically finds signal in messy human-created spreadsheets
 - **PostgreSQL Integration**: Direct database connection with schema generation

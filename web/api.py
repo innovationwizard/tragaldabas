@@ -291,6 +291,10 @@ class GenesisRequest(BaseModel):
     confirmation: str
 
 
+class QuestionAnswer(BaseModel):
+    answer: Dict[str, Any]
+
+
 class BatchEtlRequest(BaseModel):
     database_url: str
 
@@ -304,20 +308,50 @@ class WebUserPrompt:
     def __init__(self, job_id: str):
         self.job_id = job_id
         self.pending_questions: List[Dict[str, Any]] = []
-    
+
+    async def _store_question(self, question: Dict[str, Any]) -> None:
+        self.pending_questions.append(question)
+        await update_job_in_db(self.job_id, {"questions": self.pending_questions})
+
+    async def _wait_for_answer(self, question_id: str, timeout_seconds: int = 600) -> Optional[Dict[str, Any]]:
+        waited = 0
+        while waited < timeout_seconds:
+            job = get_job_from_db(self.job_id) or {}
+            questions = job.get("questions", []) or []
+            for q in questions:
+                if q.get("id") == question_id and q.get("answer") is not None:
+                    return q.get("answer")
+            await asyncio.sleep(2)
+            waited += 2
+        return None
+
     async def yes_no(self, question: str) -> bool:
         """Store question and wait for response"""
         question_id = str(uuid.uuid4())
-        self.pending_questions.append({
+        await self._store_question({
             "id": question_id,
             "type": "yes_no",
             "question": question
         })
-        # Update questions in database
-        await update_job_in_db(self.job_id, {"questions": self.pending_questions})
-        # In real implementation, wait for user response via polling
-        # For now, default to yes
         return True
+
+    async def confirm_language(self, detected: str):
+        question_id = str(uuid.uuid4())
+        await self._store_question({
+            "id": question_id,
+            "type": "confirm_language",
+            "question": "Detected transcript language. Is this correct?",
+            "detected_language": detected,
+        })
+        answer = await self._wait_for_answer(question_id)
+        if not isinstance(answer, dict):
+            return detected, True
+        if answer.get("confirm"):
+            return detected, True
+        language = (answer.get("language") or "").strip()
+        if language:
+            return language, True
+        return None, False
         
     async def select_domain(self):
         """Domain selection"""
@@ -1848,6 +1882,35 @@ async def get_job(job_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Access denied")
     
     return job
+
+
+@app.post("/api/pipeline/jobs/{job_id}/questions/{question_id}")
+async def answer_question(
+    job_id: str,
+    question_id: str,
+    payload: QuestionAnswer,
+    user: dict = Depends(get_current_user)
+):
+    """Answer a pending prompt question for a job."""
+    job = get_job_from_db(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("user_id") != user.get("id"):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    questions = job.get("questions", []) or []
+    updated = False
+    for q in questions:
+        if q.get("id") == question_id:
+            q["answer"] = payload.answer
+            updated = True
+            break
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    await update_job_in_db(job_id, {"questions": questions})
+    return {"message": "Answer recorded", "job_id": job_id, "question_id": question_id}
 
 
 @app.get("/api/pipeline/jobs/{job_id}/download/{file_type}")

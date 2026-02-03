@@ -35,6 +35,12 @@ const Pipeline = () => {
   const [genesisRetryError, setGenesisRetryError] = useState('')
   const [retryLoading, setRetryLoading] = useState(false)
   const [retryError, setRetryError] = useState('')
+  const [languageQuestion, setLanguageQuestion] = useState(null)
+  const [showLanguageModal, setShowLanguageModal] = useState(false)
+  const [languageInput, setLanguageInput] = useState('')
+  const [languageError, setLanguageError] = useState('')
+  const [languageSubmitting, setLanguageSubmitting] = useState(false)
+  const [languageNeedsInput, setLanguageNeedsInput] = useState(false)
 
   useEffect(() => {
     fetchJob()
@@ -46,6 +52,36 @@ const Pipeline = () => {
       }
     }
   }, [jobId])
+
+  useEffect(() => {
+    if (!job?.questions) return
+    const pending = job.questions.find((q) => q.type === 'confirm_language' && !q.answer)
+    if (pending) {
+      setLanguageQuestion(pending)
+      setShowLanguageModal(true)
+      setLanguageNeedsInput(false)
+      setLanguageInput('')
+      setLanguageError('')
+    }
+  }, [job?.questions])
+
+  const languageOptions = [
+    'English', 'Inglés',
+    'Spanish', 'Español',
+    'French', 'Francés',
+    'German', 'Alemán',
+    'Portuguese', 'Portugués',
+    'Italian', 'Italiano',
+    'Dutch', 'Neerlandés',
+    'Chinese', 'Chino',
+    'Japanese', 'Japonés',
+    'Korean', 'Coreano',
+    'Arabic', 'Árabe',
+    'Hindi', 'Hindi',
+    'Russian', 'Ruso',
+    'Turkish', 'Turco',
+    'Polish', 'Polaco'
+  ]
 
   const fetchJob = async () => {
     try {
@@ -171,6 +207,51 @@ const Pipeline = () => {
     } finally {
       setRetryLoading(false)
     }
+  }
+
+  const submitLanguageAnswer = async (answer) => {
+    if (!languageQuestion) return
+    try {
+      setLanguageSubmitting(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      await axios.post(
+        `/api/pipeline/jobs/${jobId}/questions/${languageQuestion.id}`,
+        { answer },
+        { headers }
+      )
+      setShowLanguageModal(false)
+      setLanguageQuestion(null)
+      setLanguageInput('')
+      setLanguageNeedsInput(false)
+      setLanguageError('')
+      fetchJob()
+    } catch (error) {
+      console.error('Failed to submit language answer:', error)
+      setLanguageError(error?.response?.data?.detail || 'Failed to submit answer.')
+    } finally {
+      setLanguageSubmitting(false)
+    }
+  }
+
+  const handleLanguageYes = async () => {
+    await submitLanguageAnswer({ confirm: true })
+  }
+
+  const handleLanguageNo = () => {
+    setLanguageNeedsInput(true)
+    setLanguageError('')
+  }
+
+  const handleLanguageSubmit = async () => {
+    if (!languageInput.trim()) {
+      setLanguageError('Please enter a language.')
+      return
+    }
+    await submitLanguageAnswer({ confirm: false, language: languageInput.trim() })
   }
 
   const handleGenesisRetry = async () => {
@@ -379,6 +460,79 @@ const Pipeline = () => {
             <Link to={`/results/${jobId}`} className="btn-primary">
               View Results
             </Link>
+          </div>
+        )}
+
+        {showLanguageModal && languageQuestion && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+            <div className="card w-full max-w-md">
+              <h2 className="text-xl font-semibold mb-2">Confirm Language</h2>
+              <p className="text-brand-muted text-sm mb-4">
+                Detected language: <span className="text-brand-text">{languageQuestion.detected_language}</span>
+              </p>
+              {languageNeedsInput && (
+                <div className="mb-2">
+                  <input
+                    type="text"
+                    list="language-options"
+                    className="w-full px-3 py-2 border border-brand-border rounded bg-brand-bg text-brand-text"
+                    placeholder="Type the correct language"
+                    value={languageInput}
+                    onChange={(e) => setLanguageInput(e.target.value)}
+                  />
+                  <datalist id="language-options">
+                    {languageOptions.map((lang) => (
+                      <option key={lang} value={lang} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
+              {languageError && (
+                <p className="text-error-text text-sm mb-2">{languageError}</p>
+              )}
+              <div className="flex justify-end gap-3 mt-4">
+                {!languageNeedsInput ? (
+                  <>
+                    <button
+                      className="btn-secondary"
+                      onClick={handleLanguageNo}
+                      disabled={languageSubmitting}
+                    >
+                      No
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={handleLanguageYes}
+                      disabled={languageSubmitting}
+                    >
+                      {languageSubmitting ? 'Saving...' : 'Yes'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        setShowLanguageModal(false)
+                        setLanguageNeedsInput(false)
+                        setLanguageInput('')
+                        setLanguageError('')
+                      }}
+                      disabled={languageSubmitting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={handleLanguageSubmit}
+                      disabled={languageSubmitting}
+                    >
+                      {languageSubmitting ? 'Saving...' : 'Confirm'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

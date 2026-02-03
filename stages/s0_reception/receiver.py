@@ -6,7 +6,7 @@ from typing import Union
 from core.interfaces import Stage
 from core.models import ReceptionResult
 from core.exceptions import StageError, FileParseError
-from .parsers import ExcelParser, CSVParser, WordParser
+from .parsers import ExcelParser, CSVParser, WordParser, AudioParser
 
 
 class Receiver(Stage[str, ReceptionResult]):
@@ -26,6 +26,12 @@ class Receiver(Stage[str, ReceptionResult]):
             ".xls": ExcelParser(),
             ".csv": CSVParser(),
             ".docx": WordParser(),
+            ".mp3": AudioParser(),
+            ".wav": AudioParser(),
+            ".m4a": AudioParser(),
+            ".flac": AudioParser(),
+            ".ogg": AudioParser(),
+            ".webm": AudioParser(),
         }
     
     def validate_input(self, input_data: str) -> bool:
