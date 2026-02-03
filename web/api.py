@@ -1294,8 +1294,8 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
     from ui.progress import ProgressTracker
     from ui.prompts import UserPrompt
     from config import settings
+    from orchestrator import PipelineContext
     from core.models import (
-        PipelineContext,
         CellClassificationResult,
         DependencyGraph,
         LogicExtractionResult,
