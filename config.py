@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     SUPABASE_URL: Optional[str] = None
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
+
+    # Railway Worker
+    WORKER_URL: Optional[str] = None
+    RAILWAY_API_KEY: Optional[str] = None
     
     # Output
     OUTPUT_DIR: str = "./output"

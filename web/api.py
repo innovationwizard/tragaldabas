@@ -626,66 +626,46 @@ async def retry_job(
     except Exception as e:
         print(f"⚠️ Edge Function error: {e}, falling back to direct process endpoint", flush=True)
 
-    # Fallback: call process endpoint directly (for when Edge Function is unavailable)
+    # Fallback: call Railway worker directly
     try:
-        print(f"🔄 Calling process endpoint directly for job {job_id}", flush=True)
-        # Get the current user's token from the request
-        from fastapi import Request
-        # Create a mock request to call process_job
-        # We need to get job details first
-        job_user_id = job.get("user_id")
+        if settings.WORKER_URL:
+            print(f"🔄 Calling Railway worker directly for job {job_id}", flush=True)
+            # Call Railway worker's process endpoint
+            worker_url = settings.WORKER_URL.rstrip("/")
+            process_url = f"{worker_url}/process/{job_id}"
 
-        # Call process_job directly
-        # This will work if running on Railway or if dependencies are available
-        try:
-            filename = job.get("filename")
-            storage_path = job.get("storage_path")
+            if not settings.RAILWAY_API_KEY:
+                raise HTTPException(status_code=500, detail="RAILWAY_API_KEY not configured")
 
-            if not filename or not storage_path:
-                raise HTTPException(status_code=500, detail="Job missing filename or storage_path")
-
-            # Download file and process
-            print(f"📥 Downloading file from Storage: {storage_path}", flush=True)
-            if not supabase:
-                raise HTTPException(status_code=500, detail="Supabase not configured")
-
-            file_response = supabase.storage.from_("uploads").download(storage_path)
-            if not file_response:
-                raise HTTPException(status_code=404, detail="File not found in storage")
-
-            file_data = file_response if isinstance(file_response, bytes) else file_response.read()
-
-            # Save to temp location
-            from pathlib import Path
-            output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
-            local_upload_dir = Path(output_dir) / "uploads" / job_id
-            local_upload_dir.mkdir(parents=True, exist_ok=True)
-            file_path = local_upload_dir / filename
-
-            with open(file_path, "wb") as f:
-                f.write(file_data)
-
-            print(f"✅ File downloaded, starting processing for job {job_id}", flush=True)
-
-            # Process the job based on its status
-            is_genesis = job.get("status") == "pending_genesis"
-            if is_genesis:
-                await run_genesis_pipeline(job_id, str(file_path), job_user_id)
-            else:
-                app_generation = bool(job.get("app_generation", False))
-                await run_pipeline(job_id, str(file_path), job_user_id, app_generation)
-
-            return {
-                "message": "Job processing started (direct call)",
-                "job_id": job_id
-            }
-
-        except Exception as process_error:
-            print(f"❌ Direct processing failed: {process_error}", flush=True)
-            import traceback
-            print(traceback.format_exc(), flush=True)
-            raise HTTPException(status_code=500, detail=f"Failed to process job directly: {str(process_error)}")
-
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    process_url,
+                    headers={
+                        "Authorization": f"Bearer {settings.RAILWAY_API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                )
+                if response.status_code == 200:
+                    print(f"✅ Railway worker accepted job {job_id}", flush=True)
+                    return {
+                        "message": "Job processing triggered via Railway worker",
+                        "job_id": job_id
+                    }
+                else:
+                    error_text = await response.text()
+                    print(f"❌ Railway worker error ({response.status_code}): {error_text}", flush=True)
+                    raise HTTPException(status_code=500, detail=f"Railway worker error: {error_text}")
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Cannot retry job: Edge Function unavailable and WORKER_URL not configured. "
+                       "Please set WORKER_URL and RAILWAY_API_KEY environment variables in Vercel, "
+                       "or deploy the Supabase Edge Function."
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Railway worker call timed out")
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ All retry methods failed for job {job_id}: {e}", flush=True)
         import traceback
