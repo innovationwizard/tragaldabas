@@ -245,6 +245,24 @@ const Pipeline = () => {
           </div>
         )}
 
+        {job?.status === 'pending_genesis' && (
+          <div className="card mb-6 bg-yellow-900/20 border border-yellow-600/30">
+            <p className="text-yellow-200">Genesis is pending. If it's been stuck for a while, you can retry to restart the genesis process.</p>
+            {retryError && (
+              <p className="text-error-text mt-2">{retryError}</p>
+            )}
+            <div className="mt-4">
+              <button
+                className="btn-secondary"
+                onClick={handleRetry}
+                disabled={retryLoading}
+              >
+                {retryLoading ? 'Retrying...' : 'Retry Genesis'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="card">
           <div className="space-y-6">
             {STAGES.map((stage) => {

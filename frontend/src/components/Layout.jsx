@@ -5,6 +5,16 @@ const Layout = ({ children }) => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
+  const userAlias = (() => {
+    if (!user) return ''
+    return (
+      user.user_metadata?.username ||
+      user.user_metadata?.alias ||
+      user.user_metadata?.full_name ||
+      (user.email ? user.email.split('@')[0] : '')
+    )
+  })()
+
   const handleLogout = async () => {
     await logout()
     navigate('/')
@@ -30,7 +40,7 @@ const Layout = ({ children }) => {
                   Placate
                 </Link>
                 <div className="flex items-center space-x-3">
-                  <span className="text-brand-muted text-sm">{user.email || user.user_metadata?.email}</span>
+                  <span className="text-brand-muted text-sm">{userAlias}</span>
                   <button
                     onClick={handleLogout}
                     className="btn-secondary text-sm"

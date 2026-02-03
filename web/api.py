@@ -588,7 +588,7 @@ async def retry_job(
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Check if job can be retried
-    if job.get("status") not in ["pending", "failed"]:
+    if job.get("status") not in ["pending", "failed", "pending_genesis"]:
         return {
             "message": f"Job is already {job.get('status')}, cannot retry",
             "job_id": job_id,
