@@ -1,6 +1,7 @@
 """LLM prompt templates for various tasks"""
 
 import json
+from typing import Optional
 import re
 from typing import Dict, Any
 from core.interfaces import LLMTask
