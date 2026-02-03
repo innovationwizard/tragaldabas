@@ -595,11 +595,11 @@ async def retry_job(
             "status": job.get("status")
         }
     
-    # Trigger Edge Function
+    # Try Edge Function first
     edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
-    
+
     try:
-        print(f"🔄 Retrying job {job_id}", flush=True)
+        print(f"🔄 Retrying job {job_id} via Edge Function", flush=True)
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(
                 edge_function_url,
@@ -612,7 +612,9 @@ async def retry_job(
             if response.status_code != 200:
                 error_text = await response.text()
                 print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
-                raise HTTPException(status_code=500, detail=f"Failed to trigger processing: {error_text}")
+                print(f"⚠️ Falling back to direct process endpoint call", flush=True)
+                # Fallback: call process endpoint directly
+                raise Exception("Edge Function failed, trying direct call")
             else:
                 print(f"✅ Edge Function triggered successfully for job {job_id}", flush=True)
                 return {
@@ -620,9 +622,72 @@ async def retry_job(
                     "job_id": job_id
                 }
     except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Edge Function call timed out")
+        print(f"⚠️ Edge Function timeout, falling back to direct process endpoint", flush=True)
     except Exception as e:
-        print(f"❌ Error retrying job {job_id}: {e}", flush=True)
+        print(f"⚠️ Edge Function error: {e}, falling back to direct process endpoint", flush=True)
+
+    # Fallback: call process endpoint directly (for when Edge Function is unavailable)
+    try:
+        print(f"🔄 Calling process endpoint directly for job {job_id}", flush=True)
+        # Get the current user's token from the request
+        from fastapi import Request
+        # Create a mock request to call process_job
+        # We need to get job details first
+        job_user_id = job.get("user_id")
+
+        # Call process_job directly
+        # This will work if running on Railway or if dependencies are available
+        try:
+            filename = job.get("filename")
+            storage_path = job.get("storage_path")
+
+            if not filename or not storage_path:
+                raise HTTPException(status_code=500, detail="Job missing filename or storage_path")
+
+            # Download file and process
+            print(f"📥 Downloading file from Storage: {storage_path}", flush=True)
+            if not supabase:
+                raise HTTPException(status_code=500, detail="Supabase not configured")
+
+            file_response = supabase.storage.from_("uploads").download(storage_path)
+            if not file_response:
+                raise HTTPException(status_code=404, detail="File not found in storage")
+
+            file_data = file_response if isinstance(file_response, bytes) else file_response.read()
+
+            # Save to temp location
+            from pathlib import Path
+            output_dir = settings.OUTPUT_DIR if settings.OUTPUT_DIR.startswith("/tmp") else "/tmp/output"
+            local_upload_dir = Path(output_dir) / "uploads" / job_id
+            local_upload_dir.mkdir(parents=True, exist_ok=True)
+            file_path = local_upload_dir / filename
+
+            with open(file_path, "wb") as f:
+                f.write(file_data)
+
+            print(f"✅ File downloaded, starting processing for job {job_id}", flush=True)
+
+            # Process the job based on its status
+            is_genesis = job.get("status") == "pending_genesis"
+            if is_genesis:
+                await run_genesis_pipeline(job_id, str(file_path), job_user_id)
+            else:
+                app_generation = bool(job.get("app_generation", False))
+                await run_pipeline(job_id, str(file_path), job_user_id, app_generation)
+
+            return {
+                "message": "Job processing started (direct call)",
+                "job_id": job_id
+            }
+
+        except Exception as process_error:
+            print(f"❌ Direct processing failed: {process_error}", flush=True)
+            import traceback
+            print(traceback.format_exc(), flush=True)
+            raise HTTPException(status_code=500, detail=f"Failed to process job directly: {str(process_error)}")
+
+    except Exception as e:
+        print(f"❌ All retry methods failed for job {job_id}: {e}", flush=True)
         import traceback
         print(traceback.format_exc(), flush=True)
         raise HTTPException(status_code=500, detail=f"Failed to retry job: {str(e)}")
