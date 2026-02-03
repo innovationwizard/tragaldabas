@@ -15,6 +15,7 @@ import os
 from datetime import datetime
 import re
 import logging
+import httpx
 
 try:
     from supabase import create_client, Client
@@ -115,7 +116,18 @@ async def update_job_in_db(job_id: str, updates: Dict[str, Any]) -> None:
     def _do():
         return supabase.table("pipeline_jobs").update(updates).eq("id", job_id).execute()
 
-    res = await asyncio.to_thread(_do)
+    res = None
+    last_err = None
+    for attempt in range(3):
+        try:
+            res = await asyncio.to_thread(_do)
+            last_err = None
+            break
+        except (httpx.HTTPError, OSError, RuntimeError) as exc:
+            last_err = exc
+            await asyncio.sleep(0.3 * (attempt + 1))
+    if last_err:
+        raise last_err
     
     err = getattr(res, "error", None)
     data = getattr(res, "data", None)
@@ -1382,7 +1394,13 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
         if not isinstance(base_result, dict):
             base_result = {}
 
-        completed = existing.get("completed_stages", []) or []
+        completed_raw = existing.get("completed_stages", []) or []
+        completed = []
+        for value in completed_raw:
+            try:
+                completed.append(int(value))
+            except (TypeError, ValueError):
+                continue
 
         ctx = PipelineContext(file_path=file_path)
         ctx.cell_classification = _coerce_model(
@@ -1410,8 +1428,6 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
             await update_job_in_db(job_id, {"result": base_result})
 
         def _needs_stage(stage_num: int) -> bool:
-            if stage_num not in completed:
-                return True
             if stage_num == 8 and ctx.cell_classification is None:
                 return True
             if stage_num == 9 and ctx.dependency_graph is None:
@@ -1422,7 +1438,7 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
                 return True
             if stage_num == 12 and ctx.scaffold is None:
                 return True
-            return False
+            return stage_num not in completed
 
         if _needs_stage(8):
             ctx.cell_classification = await orchestrator._execute_stage(8, ctx.file_path)
