@@ -105,12 +105,18 @@ class CellClassifier(Stage[str, CellClassificationResult]):
         # Ensure referenced cells exist even if empty in workbook
         for target_address in list(references_by_cell.keys()):
             if target_address not in cell_data:
+                # Parse address to extract sheet, row, and col
+                sheet_name, coord = target_address.split("!", 1)
+                row, col = coordinate_to_tuple(coord)
                 cell_data[target_address] = {
                     "value": None,
                     "formula": None,
                     "references": [],
                     "input_type": InputType.TEXT,
                     "formatting": None,
+                    "row": row,
+                    "col": col,
+                    "sheet": sheet_name,
                 }
 
         sheet_cells: Dict[str, List[ClassifiedCell]] = {}
