@@ -31,6 +31,8 @@ const Pipeline = () => {
   const [genesisInput, setGenesisInput] = useState('')
   const [genesisError, setGenesisError] = useState('')
   const [genesisLoading, setGenesisLoading] = useState(false)
+  const [genesisRetryLoading, setGenesisRetryLoading] = useState(false)
+  const [genesisRetryError, setGenesisRetryError] = useState('')
   const [retryLoading, setRetryLoading] = useState(false)
   const [retryError, setRetryError] = useState('')
 
@@ -171,6 +173,33 @@ const Pipeline = () => {
     }
   }
 
+  const handleGenesisRetry = async () => {
+    setGenesisRetryError('')
+    const normalized = genesisInput.trim().toLowerCase()
+    if (normalized !== 'y' && normalized !== 'yes') {
+      setGenesisRetryError('Type "y" or "yes" to continue.')
+      return
+    }
+    try {
+      setGenesisRetryLoading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      await axios.post(`/api/pipeline/jobs/${jobId}/genesis/retry`, { confirmation: genesisInput }, { headers })
+      setShowGenesisModal(false)
+      setGenesisInput('')
+      fetchJob()
+      startPolling()
+    } catch (error) {
+      console.error('Failed to retry genesis:', error)
+      setGenesisRetryError(error?.response?.data?.detail || 'Failed to retry genesis.')
+    } finally {
+      setGenesisRetryLoading(false)
+    }
+  }
+
   const getStageStatus = (stageNum) => {
     if (!job || job.status === 'pending') {
       return stageNum === 0 ? 'pending' : 'waiting'
@@ -233,14 +262,30 @@ const Pipeline = () => {
             {retryError && (
               <p className="text-error-text mt-2">{retryError}</p>
             )}
+            {genesisRetryError && (
+              <p className="text-error-text mt-2">{genesisRetryError}</p>
+            )}
             <div className="mt-4">
-              <button
-                className="btn-secondary"
-                onClick={handleRetry}
-                disabled={retryLoading}
-              >
-                {retryLoading ? 'Retrying...' : 'Retry'}
-              </button>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  className="btn-secondary"
+                  onClick={handleRetry}
+                  disabled={retryLoading}
+                >
+                  {retryLoading ? 'Retrying...' : 'Retry'}
+                </button>
+                {job?.app_generation && (job?.completed_stages || []).includes(7) && (
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      setGenesisRetryError('')
+                      setShowGenesisModal(true)
+                    }}
+                  >
+                    Retry Genesis
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -248,16 +293,19 @@ const Pipeline = () => {
         {job?.status === 'pending_genesis' && (
           <div className="card mb-6 bg-yellow-900/20 border border-yellow-600/30">
             <p className="text-yellow-200">Genesis is pending. If it's been stuck for a while, you can retry to restart the genesis process.</p>
-            {retryError && (
-              <p className="text-error-text mt-2">{retryError}</p>
+            {genesisRetryError && (
+              <p className="text-error-text mt-2">{genesisRetryError}</p>
             )}
             <div className="mt-4">
               <button
                 className="btn-secondary"
-                onClick={handleRetry}
-                disabled={retryLoading}
+                onClick={() => {
+                  setGenesisRetryError('')
+                  setShowGenesisModal(true)
+                }}
+                disabled={genesisRetryLoading}
               >
-                {retryLoading ? 'Retrying...' : 'Retry Genesis'}
+                {genesisRetryLoading ? 'Retrying...' : 'Retry Genesis'}
               </button>
             </div>
           </div>
@@ -351,6 +399,9 @@ const Pipeline = () => {
               {genesisError && (
                 <p className="text-error-text text-sm mb-2">{genesisError}</p>
               )}
+              {genesisRetryError && (
+                <p className="text-error-text text-sm mb-2">{genesisRetryError}</p>
+              )}
               <div className="flex justify-end gap-3 mt-4">
                 <button
                   className="btn-secondary"
@@ -358,17 +409,28 @@ const Pipeline = () => {
                     setShowGenesisModal(false)
                     setGenesisInput('')
                     setGenesisError('')
+                    setGenesisRetryError('')
                   }}
                 >
                   CANCEL
                 </button>
-                <button
-                  className="btn-primary"
-                  onClick={handleGenesis}
-                  disabled={genesisLoading}
-                >
-                  {genesisLoading ? 'GENESIS...' : 'GENESIS'}
-                </button>
+                {(job?.status === 'failed' || job?.status === 'pending_genesis') && job?.app_generation && (job?.completed_stages || []).includes(7) ? (
+                  <button
+                    className="btn-primary"
+                    onClick={handleGenesisRetry}
+                    disabled={genesisRetryLoading}
+                  >
+                    {genesisRetryLoading ? 'GENESIS...' : 'RETRY GENESIS'}
+                  </button>
+                ) : (
+                  <button
+                    className="btn-primary"
+                    onClick={handleGenesis}
+                    disabled={genesisLoading}
+                  >
+                    {genesisLoading ? 'GENESIS...' : 'GENESIS'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

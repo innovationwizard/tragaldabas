@@ -879,6 +879,126 @@ async def trigger_genesis(
         raise HTTPException(status_code=500, detail=f"Failed to trigger genesis: {str(e)}")
 
 
+@app.post("/api/pipeline/jobs/{job_id}/genesis/retry")
+async def retry_genesis(
+    job_id: str,
+    payload: GenesisRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Retry app generation stages (8-12) without re-running stages 1-7."""
+    from config import settings
+    import httpx
+
+    job = get_job_from_db(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.get("user_id") != user.get("id"):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    confirmation = (payload.confirmation or "").strip().lower()
+    if confirmation not in {"y", "yes"}:
+        raise HTTPException(status_code=400, detail="Confirmation must be 'y' or 'yes'")
+
+    def _ready_for_genesis(candidate: Dict[str, Any]) -> bool:
+        if candidate.get("status") in {"awaiting_genesis", "ready_for_genesis"}:
+            return True
+        completed = candidate.get("completed_stages", []) or []
+        if 7 in completed:
+            return True
+        if candidate.get("current_stage") == 7:
+            return True
+        return False
+
+    batch_id = job.get("batch_id")
+    edge_function_url = f"{settings.SUPABASE_URL}/functions/v1/process-pipeline"
+
+    if batch_id:
+        response = (
+            supabase.table("pipeline_jobs")
+            .select("*")
+            .eq("user_id", user.get("id"))
+            .eq("batch_id", batch_id)
+            .order("batch_order", desc=False)
+            .execute()
+        )
+        if hasattr(response, "error") and response.error:
+            raise HTTPException(status_code=500, detail=str(response.error))
+        jobs = response.data or []
+        app_jobs = [j for j in jobs if j.get("app_generation")]
+        if not app_jobs:
+            raise HTTPException(status_code=409, detail="No app generation jobs in this batch")
+        if not all(_ready_for_genesis(j) for j in app_jobs):
+            raise HTTPException(status_code=409, detail="Batch not ready for genesis retry")
+        for j in app_jobs:
+            if j.get("status") not in {"failed", "awaiting_genesis", "ready_for_genesis"}:
+                raise HTTPException(status_code=409, detail=f"Job {j.get('id')} not eligible for genesis retry")
+        for j in app_jobs:
+            await update_job_in_db(j["id"], {"status": "pending_genesis", "error": None})
+        try:
+            print(f"🧬 Retrying Genesis for batch {batch_id}", flush=True)
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                tasks = [
+                    client.post(
+                        edge_function_url,
+                        json={"job_id": j["id"]},
+                        headers={
+                            "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                            "Content-Type": "application/json"
+                        }
+                    )
+                    for j in app_jobs
+                ]
+                responses = await asyncio.gather(*tasks, return_exceptions=True)
+                for j, response in zip(app_jobs, responses):
+                    if isinstance(response, Exception):
+                        print(f"❌ Edge Function error for job {j['id']}: {response}", flush=True)
+                        continue
+                    if response.status_code != 200:
+                        error_text = await response.text()
+                        raise HTTPException(status_code=500, detail=f"Failed to retry genesis: {error_text}")
+            return {"message": "Genesis retry triggered", "job_ids": [j["id"] for j in app_jobs], "batch_id": batch_id}
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Edge Function call timed out")
+        except Exception as e:
+            print(f"❌ Error retrying genesis for batch {batch_id}: {e}", flush=True)
+            import traceback
+            print(traceback.format_exc(), flush=True)
+            raise HTTPException(status_code=500, detail=f"Failed to retry genesis: {str(e)}")
+
+    if job.get("status") not in {"failed", "awaiting_genesis", "ready_for_genesis"}:
+        raise HTTPException(status_code=409, detail=f"Job status {job.get('status')} does not allow genesis retry")
+    if not _ready_for_genesis(job):
+        raise HTTPException(status_code=409, detail="Job not ready for genesis retry")
+
+    await update_job_in_db(job_id, {"status": "pending_genesis", "error": None})
+
+    try:
+        print(f"🧬 Retrying Genesis for job {job_id}", flush=True)
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                edge_function_url,
+                json={"job_id": job_id},
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                    "Content-Type": "application/json"
+                }
+            )
+            if response.status_code != 200:
+                error_text = await response.text()
+                print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
+                raise HTTPException(status_code=500, detail=f"Failed to retry genesis: {error_text}")
+            print(f"✅ Genesis retry triggered successfully for job {job_id}", flush=True)
+            return {"message": "Genesis retry triggered", "job_id": job_id}
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Edge Function call timed out")
+    except Exception as e:
+        print(f"❌ Error retrying genesis for job {job_id}: {e}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retry genesis: {str(e)}")
+
+
 async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation: bool):
     """Run pipeline in background - lazy imports to reduce serverless function size"""
     print(f"🎯 run_pipeline() CALLED for job {job_id}, file: {file_path}", flush=True)

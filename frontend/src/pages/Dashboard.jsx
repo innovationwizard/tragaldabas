@@ -9,6 +9,12 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true)
   const [retryingId, setRetryingId] = useState(null)
   const [retryErrors, setRetryErrors] = useState({})
+  const [genesisRetryingId, setGenesisRetryingId] = useState(null)
+  const [genesisRetryErrors, setGenesisRetryErrors] = useState({})
+  const [showGenesisRetryModal, setShowGenesisRetryModal] = useState(false)
+  const [genesisRetryJob, setGenesisRetryJob] = useState(null)
+  const [genesisRetryInput, setGenesisRetryInput] = useState('')
+  const [genesisRetryModalError, setGenesisRetryModalError] = useState('')
 
   const formatGuatemalaDateTime = (value) => {
     if (!value) return ''
@@ -115,6 +121,46 @@ const Dashboard = () => {
     }
   }
 
+  const openGenesisRetryModal = (job) => {
+    setGenesisRetryJob(job)
+    setGenesisRetryInput('')
+    setGenesisRetryModalError('')
+    setShowGenesisRetryModal(true)
+  }
+
+  const handleGenesisRetry = async () => {
+    if (!genesisRetryJob) return
+    const normalized = genesisRetryInput.trim().toLowerCase()
+    if (normalized !== 'y' && normalized !== 'yes') {
+      setGenesisRetryModalError('Type "y" or "yes" to continue.')
+      return
+    }
+    try {
+      setGenesisRetryErrors((prev) => ({ ...prev, [genesisRetryJob.id]: '' }))
+      setGenesisRetryingId(genesisRetryJob.id)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      await axios.post(
+        `/api/pipeline/jobs/${genesisRetryJob.id}/genesis/retry`,
+        { confirmation: genesisRetryInput },
+        { headers }
+      )
+      fetchJobs()
+    } catch (error) {
+      console.error('Failed to retry genesis:', error)
+      setGenesisRetryErrors((prev) => ({
+        ...prev,
+        [genesisRetryJob.id]: error?.response?.data?.detail || 'Genesis retry failed.'
+      }))
+    } finally {
+      setGenesisRetryingId(null)
+      setShowGenesisRetryModal(false)
+    }
+  }
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -162,6 +208,9 @@ const Dashboard = () => {
                     {retryErrors[job.id] && (
                       <p className="text-error-text text-xs mt-2">{retryErrors[job.id]}</p>
                     )}
+                    {genesisRetryErrors[job.id] && (
+                      <p className="text-error-text text-xs mt-2">{genesisRetryErrors[job.id]}</p>
+                    )}
                     {job.status === 'failed' && (
                       <div className="mt-2 flex justify-end gap-2">
                         <button
@@ -171,6 +220,15 @@ const Dashboard = () => {
                         >
                           {retryingId === job.id ? 'Retrying...' : 'Retry'}
                         </button>
+                        {job.app_generation && (job.completed_stages || []).includes(7) && (
+                          <button
+                            className="btn-primary text-xs px-3 py-1"
+                            onClick={() => openGenesisRetryModal(job)}
+                            disabled={genesisRetryingId === job.id}
+                          >
+                            {genesisRetryingId === job.id ? 'Genesis...' : 'Retry Genesis'}
+                          </button>
+                        )}
                         <Link
                           to={`/pipeline/${job.id}`}
                           className="btn-secondary text-xs px-3 py-1"
@@ -181,6 +239,15 @@ const Dashboard = () => {
                     )}
                     {job.status !== 'failed' && (
                       <div className="mt-2 flex justify-end">
+                        {job.status === 'pending_genesis' && job.app_generation && (job.completed_stages || []).includes(7) && (
+                          <button
+                            className="btn-primary text-xs px-3 py-1 mr-2"
+                            onClick={() => openGenesisRetryModal(job)}
+                            disabled={genesisRetryingId === job.id}
+                          >
+                            {genesisRetryingId === job.id ? 'Genesis...' : 'Retry Genesis'}
+                          </button>
+                        )}
                         <Link
                           to={job.status === 'completed' ? `/results/${job.id}` : `/pipeline/${job.id}`}
                           className="btn-secondary text-xs px-3 py-1"
@@ -196,6 +263,45 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+      {showGenesisRetryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="card w-full max-w-md">
+            <h2 className="text-xl font-semibold mb-2">Retry Genesis?</h2>
+            <p className="text-brand-muted text-sm mb-4">
+              Type "y" or "yes" to re-run stages 8-12.
+            </p>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border border-brand-border rounded bg-brand-bg text-brand-text mb-2"
+              placeholder='Type "y" or "yes"'
+              value={genesisRetryInput}
+              onChange={(e) => setGenesisRetryInput(e.target.value)}
+            />
+            {genesisRetryModalError && (
+              <p className="text-error-text text-sm mb-2">{genesisRetryModalError}</p>
+            )}
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowGenesisRetryModal(false)
+                  setGenesisRetryInput('')
+                  setGenesisRetryModalError('')
+                }}
+              >
+                CANCEL
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleGenesisRetry}
+                disabled={genesisRetryingId === (genesisRetryJob && genesisRetryJob.id)}
+              >
+                {genesisRetryingId === (genesisRetryJob && genesisRetryJob.id) ? 'GENESIS...' : 'RETRY GENESIS'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }
