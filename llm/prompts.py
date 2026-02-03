@@ -335,6 +335,37 @@ Respond with JSON:
             # Escape stray backslashes that break JSON parsing.
             return re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", text)
 
+        def _sanitize_json_strings(text: str) -> str:
+            # Escape newlines/control chars inside strings; close dangling quote if needed.
+            if not text:
+                return text
+            out = []
+            in_string = False
+            escape = False
+            for ch in text:
+                if escape:
+                    out.append(ch)
+                    escape = False
+                    continue
+                if ch == "\\":
+                    out.append(ch)
+                    escape = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    out.append(ch)
+                    continue
+                if in_string and ch in ("\n", "\r"):
+                    out.append("\\n")
+                    continue
+                if in_string and ord(ch) < 0x20:
+                    out.append(f"\\u{ord(ch):04x}")
+                    continue
+                out.append(ch)
+            if in_string:
+                out.append('"')
+            return "".join(out)
+
         def _balanced_json(text: str) -> str:
             start = text.find("{")
             if start == -1:
@@ -367,12 +398,15 @@ Respond with JSON:
             primary,
             _strip_trailing_commas(primary),
             _fix_backslashes(primary),
+            _sanitize_json_strings(primary),
             _balanced_json(primary),
             _strip_trailing_commas(_balanced_json(primary)),
             _fix_backslashes(_balanced_json(primary)),
+            _sanitize_json_strings(_balanced_json(primary)),
             _balanced_json(fallback),
             _strip_trailing_commas(_balanced_json(fallback)),
             _fix_backslashes(_balanced_json(fallback)),
+            _sanitize_json_strings(_balanced_json(fallback)),
         ]
         last_error = None
         for candidate in attempts:
