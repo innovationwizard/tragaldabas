@@ -206,7 +206,7 @@ class CellClassifier(Stage[str, CellClassificationResult]):
 
     def _extract_named_ranges(self, workbook) -> List[NamedRange]:
         named_ranges: List[NamedRange] = []
-        for defined_name in workbook.defined_names.definedName:
+        for defined_name in workbook.defined_names.values():
             if not defined_name.name:
                 continue
             for sheet_name, ref in defined_name.destinations:
