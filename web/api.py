@@ -1062,6 +1062,15 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
                 print(f"⚠️ Warning: Sanity check shows status is '{check_data[0].get('status')}', expected '{status_value}'", flush=True)
         
         if app_generation:
+            # Fetch job to check for batch_id
+            if supabase:
+                def _get_job():
+                    return supabase.table("pipeline_jobs").select("batch_id").eq("id", job_id).execute()
+                job_data = await asyncio.to_thread(_get_job)
+                job = job_data.data[0] if job_data.data else {}
+            else:
+                job = {}
+
             if job.get("batch_id"):
                 await promote_batch_to_awaiting_genesis(job.get("batch_id"))
             else:

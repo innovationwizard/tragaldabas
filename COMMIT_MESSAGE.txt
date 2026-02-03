@@ -1,0 +1,194 @@
+Implement batch-aware genesis flow with coordinated status transitions
+
+## Overview
+Redesign genesis triggering to coordinate multiple jobs in a batch, ensuring
+all files uploaded together complete ETL stages before any can start genesis.
+This prevents partial batch processing and provides clearer UX around multi-file
+workflows.
+
+## Problem Statement
+Previously, each job independently transitioned to awaiting_genesis after stage 7,
+allowing users to trigger genesis on individual files before their batch-mates
+completed ETL. This created:
+- Confusion about which files were ready
+- Incomplete batch processing
+- Race conditions in batch operations
+
+## Solution
+Introduce batch-aware status coordination with a new intermediate status:
+
+### New Status: ready_for_genesis
+Individual jobs reach this status after completing stage 7, but wait here
+until all other jobs in their batch also reach this status. Only then are
+all jobs atomically promoted to awaiting_genesis together.
+
+### Status Flow
+```
+Stage 7 complete → ready_for_genesis (individual)
+                         ↓
+    Wait for ALL batch jobs to reach ready_for_genesis
+                         ↓
+    ALL jobs promoted → awaiting_genesis (batch-level)
+                         ↓
+         User clicks GENESIS on any job
+                         ↓
+    ALL batch jobs triggered → pending_genesis (together)
+                         ↓
+         Worker processes → stages 8-12 → completed
+```
+
+## Changes
+
+### Backend: web/api.py
+
+#### New Function: promote_batch_to_awaiting_genesis (Lines 130-150)
+- Checks all jobs in batch for ready_for_genesis status
+- Only promotes if ALL app_generation jobs are ready
+- Atomically updates all jobs to awaiting_genesis together
+- Called automatically when last job in batch completes stage 7
+
+#### Modified: process_job (Line 938, 1035, 1065-1068)
+- Jobs now transition to ready_for_genesis instead of awaiting_genesis
+- Triggers batch promotion check after status update
+- Single-file uploads (no batch_id) skip batch logic and go directly to awaiting_genesis
+
+#### Modified: /api/pipeline/genesis/{job_id} endpoint (Lines 746-797)
+- Validates entire batch is at awaiting_genesis before triggering
+- Triggers ALL batch jobs together when GENESIS clicked
+- Updates all batch jobs to pending_genesis atomically
+- Calls Edge Function for each job in parallel
+
+### Frontend: Pipeline.jsx
+
+#### New UI State Handling
+- Recognizes ready_for_genesis status
+- Shows "Waiting for batch..." message instead of GENESIS button
+- Displays batch progress (X/Y files ready)
+- Maintains existing behavior for awaiting_genesis status
+
+#### Visual Indicators
+- Different styling for ready_for_genesis vs awaiting_genesis
+- Clear indication that job is waiting for batch-mates
+- Prevents premature genesis triggering
+
+### Frontend: Results.jsx
+
+#### Status Recognition
+- Accepts ready_for_genesis as valid completed status
+- Shows appropriate label for batch-waiting jobs
+- Maintains compatibility with other statuses
+
+### Frontend: Dashboard.jsx
+
+#### Batch Status Display
+- Shows batch coordination state in job cards
+- Indicates when jobs are waiting vs ready
+- Consistent status messaging across views
+
+## Batch Coordination Logic
+
+### Promotion Requirements (ALL must be true)
+1. Job has batch_id (multi-file upload)
+2. At least one job in batch has app_generation=true
+3. ALL app_generation jobs have status=ready_for_genesis
+
+### Edge Cases Handled
+- **Single-file uploads**: Skip batch logic, go directly to awaiting_genesis
+- **Mixed file types**: Only Excel files (app_generation=true) participate in batch coordination
+- **Failed jobs**: Block batch promotion until retried and successful
+- **Non-app-generation files**: Don't block batch promotion
+
+## Benefits
+
+### User Experience
+- Clear understanding of batch state
+- All files processed together
+- Single click triggers entire batch
+- No partial batch confusion
+
+### System Reliability
+- Atomic batch operations
+- No race conditions between batch members
+- Predictable status transitions
+- Clear error states
+
+### Developer Experience
+- Explicit batch coordination in code
+- Easy to debug with batch status tools
+- Clear separation of single vs batch workflows
+- Comprehensive logging of batch state changes
+
+## Backwards Compatibility
+
+### Single-File Uploads
+- Unchanged behavior
+- No batch_id assigned
+- Direct transition to awaiting_genesis
+- Immediate genesis triggering available
+
+### Existing Jobs
+- Old jobs without batch_id continue to work
+- New status only applies to jobs after this deployment
+- No migration needed
+
+## Testing Recommendations
+
+1. **Single-file upload**: Should work exactly as before
+2. **Multi-file upload (2-3 Excel files)**: Should coordinate and promote together
+3. **Mixed file types**: Non-Excel files should not block Excel batch
+4. **Failed job in batch**: Should block batch promotion until retry succeeds
+5. **Genesis triggering**: Should trigger all batch jobs together
+
+## Monitoring
+
+Watch for:
+- Jobs stuck at ready_for_genesis (indicates batch coordination issue)
+- All jobs ready but not promoted (indicates promotion logic failure)
+- Partial batch triggering (indicates atomicity issue)
+
+Tools:
+- ./check-batch-status.sh <job-id> - Detailed batch state analysis
+- ./quick-debug.sh - Quick health check including batch awareness
+- SYSTEMATIC_DEBUGGING_PROTOCOL.md Phase 6A - Batch promotion debugging
+
+## Related Documentation
+
+- SYSTEMATIC_DEBUGGING_PROTOCOL.md - Phase 6A added for batch debugging
+- DEBUGGING_TOOLS_README.md - Complete tooling guide
+- DEPLOYMENT_CHECKLIST.md - Deployment and testing procedures
+- DEBUGGING_PLAN_SUMMARY.md - Executive summary of debugging framework
+
+## Database Schema
+
+No schema changes required. Uses existing columns:
+- batch_id (UUID, nullable) - Links jobs in same batch
+- batch_order (integer, nullable) - Order within batch
+- batch_total (integer, nullable) - Total jobs in batch
+- app_generation (boolean) - Whether job should generate app
+- status (enum) - New value: ready_for_genesis
+
+## Performance Considerations
+
+- Batch promotion query: O(n) where n = jobs in batch (typically 2-10)
+- Promotion check on every job completion: negligible overhead
+- Atomic updates prevent race conditions
+- No additional database indexes needed
+
+## Rollback Plan
+
+If issues occur:
+1. Revert this commit
+2. Manually update any stuck jobs:
+   UPDATE pipeline_jobs SET status='awaiting_genesis'
+   WHERE status='ready_for_genesis' AND app_generation=true
+3. Monitor for correct behavior
+
+## Future Enhancements
+
+Potential improvements:
+- Real-time batch progress UI updates (WebSocket)
+- Batch timeout (auto-promote if one job stuck >30min)
+- Partial batch triggering option (advanced users)
+- Batch cancellation (cancel entire batch at once)
+
+---

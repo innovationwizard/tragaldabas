@@ -18,17 +18,41 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      
-      // Set axios auth header if session exists
-      if (session?.access_token) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${session.access_token}`
+    let isMounted = true
+
+    const loadSession = async () => {
+      try {
+        const timeoutMs = 5000
+        const sessionPromise = supabase.auth.getSession()
+        const { data: { session } } = await Promise.race([
+          sessionPromise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Auth session timeout')), timeoutMs)
+          ),
+        ])
+        if (!isMounted) return
+        setUser(session?.user ?? null)
+        
+        // Set axios auth header if session exists
+        if (session?.access_token) {
+          axios.defaults.headers.common['Authorization'] = `Bearer ${session.access_token}`
+        } else {
+          delete axios.defaults.headers.common['Authorization']
+        }
+      } catch (error) {
+        if (!isMounted) return
+        console.error('Failed to initialize auth session:', error)
+        setUser(null)
+        delete axios.defaults.headers.common['Authorization']
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
       }
-      
-      setLoading(false)
-    })
+    }
+
+    // Get initial session
+    loadSession()
 
     // Listen for auth changes
     const {
@@ -44,7 +68,10 @@ export const AuthProvider = ({ children }) => {
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   const login = async (username, password) => {

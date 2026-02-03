@@ -12,7 +12,12 @@ const Dashboard = () => {
 
   const formatGuatemalaDateTime = (value) => {
     if (!value) return ''
-    const date = new Date(value)
+    const hasTimezone = typeof value === 'string' && (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(value))
+    const normalized = typeof value === 'string' && !hasTimezone
+      ? `${value.replace(' ', 'T')}Z`
+      : value
+    const date = new Date(normalized)
+    if (Number.isNaN(date.getTime())) return ''
     return date.toLocaleString('es-GT', {
       timeZone: 'America/Guatemala',
       hour12: false,
