@@ -239,21 +239,31 @@ async def worker_process(
         credentials=settings.SUPABASE_SERVICE_ROLE_KEY
     )
     
-    try:
-        print(f"🚀 Starting pipeline processing for job {job_id}", flush=True)
-        # Lazy import process_job
-        process_job_func = get_process_job()
-        print("process_job_func file:", process_job_func.__code__.co_filename, flush=True)
-        print("process_job_func module:", process_job_func.__module__, flush=True)
-        result = await process_job_func(job_id, request, mock_credentials)
-        print(f"✅ Pipeline completed successfully for job {job_id}", flush=True)
-        return result
-    except Exception as e:
-        import traceback
-        error_msg = str(e)
-        print(f"Worker error processing job {job_id}: {error_msg}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to process job: {error_msg}")
+    # Lazy import process_job
+    process_job_func = get_process_job()
+    print("process_job_func file:", process_job_func.__code__.co_filename, flush=True)
+    print("process_job_func module:", process_job_func.__module__, flush=True)
+
+    # Start processing in background - don't wait for completion
+    # This allows long-running genesis jobs to process while we return immediately
+    # The frontend will poll for status updates
+    async def process_in_background():
+        try:
+            print(f"🚀 Starting pipeline processing for job {job_id}", flush=True)
+            await process_job_func(job_id, request, mock_credentials)
+            print(f"✅ Pipeline completed successfully for job {job_id}", flush=True)
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"❌ Worker error processing job {job_id}: {error_msg}", flush=True)
+            print(traceback.format_exc(), flush=True)
+
+    # Fire and forget - start processing but return immediately
+    import asyncio
+    asyncio.create_task(process_in_background())
+
+    print(f"✅ Job {job_id} accepted and processing started in background", flush=True)
+    return {"message": "Job processing started", "job_id": job_id}
 
 
 @app.post("/etl/{job_id}")
@@ -271,17 +281,26 @@ async def worker_etl(
         credentials=settings.SUPABASE_SERVICE_ROLE_KEY
     )
 
-    try:
-        print(f"🚀 Starting ETL processing for job {job_id}", flush=True)
-        process_etl_func = get_process_etl_job()
-        result = await process_etl_func(job_id, request, mock_credentials)
-        print(f"✅ ETL completed successfully for job {job_id}", flush=True)
-        return result
-    except Exception as e:
-        import traceback
-        error_msg = str(e)
-        print(f"Worker error processing ETL job {job_id}: {error_msg}")
-        print(traceback.format_exc())
+    # Process ETL in background for consistency
+    process_etl_func = get_process_etl_job()
+
+    async def process_etl_in_background():
+        try:
+            print(f"🚀 Starting ETL processing for job {job_id}", flush=True)
+            await process_etl_func(job_id, request, mock_credentials)
+            print(f"✅ ETL completed successfully for job {job_id}", flush=True)
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"❌ Worker error processing ETL job {job_id}: {error_msg}", flush=True)
+            print(traceback.format_exc(), flush=True)
+
+    # Fire and forget
+    import asyncio
+    asyncio.create_task(process_etl_in_background())
+
+    print(f"✅ ETL job {job_id} accepted and processing started in background", flush=True)
+    return {"message": "ETL processing started", "job_id": job_id}
         raise HTTPException(status_code=500, detail=f"Failed to process ETL job: {error_msg}")
 
 
