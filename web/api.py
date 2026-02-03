@@ -931,7 +931,7 @@ async def retry_genesis(
         if not all(_ready_for_genesis(j) for j in app_jobs):
             raise HTTPException(status_code=409, detail="Batch not ready for genesis retry")
         for j in app_jobs:
-            if j.get("status") not in {"failed", "awaiting_genesis", "ready_for_genesis"}:
+            if j.get("status") not in {"failed", "awaiting_genesis", "ready_for_genesis", "pending_genesis", "genesis_running"}:
                 raise HTTPException(status_code=409, detail=f"Job {j.get('id')} not eligible for genesis retry")
         for j in app_jobs:
             await update_job_in_db(j["id"], {"status": "pending_genesis", "error": None})
@@ -966,7 +966,7 @@ async def retry_genesis(
             print(traceback.format_exc(), flush=True)
             raise HTTPException(status_code=500, detail=f"Failed to retry genesis: {str(e)}")
 
-    if job.get("status") not in {"failed", "awaiting_genesis", "ready_for_genesis"}:
+    if job.get("status") not in {"failed", "awaiting_genesis", "ready_for_genesis", "pending_genesis", "genesis_running"}:
         raise HTTPException(status_code=409, detail=f"Job status {job.get('status')} does not allow genesis retry")
     if not _ready_for_genesis(job):
         raise HTTPException(status_code=409, detail="Job not ready for genesis retry")
