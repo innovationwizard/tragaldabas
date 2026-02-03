@@ -1262,8 +1262,8 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
                 output_schema_fields.append(f'"{key}": z.number().nullable()')
             else:
                 output_schema_fields.append(f'"{key}": z.any()')
-        schema = f\"z.object({{{', '.join(schema_fields)}}})\"
-        output_schema = f\"z.object({{{', '.join(output_schema_fields)}}})\"
+        schema = f"z.object({{{', '.join(schema_fields)}}})"
+        output_schema = f"z.object({{{', '.join(output_schema_fields)}}})"
         return "\n".join([
             "import { z } from 'zod';",
             "",
