@@ -2,6 +2,7 @@
 """
 Pipeline Worker Service
 Deploy this to Railway with requirements-full.txt
+Rebuild timestamp: 2026-02-03T12:10:00Z
 """
 
 from fastapi import FastAPI, HTTPException, Depends, Header
