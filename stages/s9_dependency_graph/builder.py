@@ -258,6 +258,9 @@ class DependencyGraphBuilder(Stage[CellClassificationResult, DependencyGraph]):
         except ValueError:
             return []
 
+        if None in (min_col, min_row, max_col, max_row):
+            return [f"{sheet_name}!{address}"]
+
         total = (max_row - min_row + 1) * (max_col - min_col + 1)
         if total > self.MAX_RANGE_EXPANSION:
             return [f"{sheet_name}!{address}"]
