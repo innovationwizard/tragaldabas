@@ -330,6 +330,10 @@ Respond with JSON:
         def _strip_trailing_commas(text: str) -> str:
             return re.sub(r",\s*([}\]])", r"\1", text)
 
+        def _fix_backslashes(text: str) -> str:
+            # Escape stray backslashes that break JSON parsing.
+            return re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", text)
+
         def _balanced_json(text: str) -> str:
             start = text.find("{")
             if start == -1:
@@ -345,15 +349,38 @@ Respond with JSON:
                         return text[start:idx + 1]
             return text[start:]
 
+        def _find_first_json_object(text: str) -> Optional[Dict[str, Any]]:
+            decoder = json.JSONDecoder()
+            for idx, char in enumerate(text):
+                if char != "{":
+                    continue
+                try:
+                    parsed, _ = decoder.raw_decode(text[idx:])
+                    if isinstance(parsed, dict):
+                        return parsed
+                except Exception:
+                    continue
+            return None
+
         attempts = [
             primary,
             _strip_trailing_commas(primary),
+            _fix_backslashes(primary),
             _balanced_json(primary),
             _strip_trailing_commas(_balanced_json(primary)),
+            _fix_backslashes(_balanced_json(primary)),
             _balanced_json(fallback),
             _strip_trailing_commas(_balanced_json(fallback)),
+            _fix_backslashes(_balanced_json(fallback)),
         ]
         last_error = None
+        for candidate in attempts:
+            try:
+                parsed = _find_first_json_object(candidate)
+                if parsed is not None:
+                    return parsed
+            except Exception:
+                pass
         for candidate in attempts:
             try:
                 return json.loads(candidate)
