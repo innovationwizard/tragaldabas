@@ -5,6 +5,42 @@ Deploy this to Railway with requirements-full.txt
 Rebuild timestamp: 2026-02-03T12:10:00Z
 """
 
+import subprocess
+import sys
+
+# Startup debug signal for Railway logs
+print("=" * 80, flush=True)
+print("🚀 TRAGALDABAS WORKER STARTING", flush=True)
+print("=" * 80, flush=True)
+print(f"Python version: {sys.version}", flush=True)
+print(f"Rebuild timestamp: 2026-02-03T12:10:00Z", flush=True)
+
+# Log git commit to verify deployment version
+try:
+    commit_hash = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'],
+                                         stderr=subprocess.DEVNULL).decode('utf-8').strip()
+    print(f"✅ Git commit: {commit_hash}", flush=True)
+except:
+    print("⚠️  Git commit hash unavailable", flush=True)
+
+# Verify the generator.py fix is present
+try:
+    with open('stages/s11_code_generation/generator.py', 'r') as f:
+        lines = f.readlines()
+        line_1265 = lines[1264].strip() if len(lines) > 1264 else "NOT FOUND"
+        line_1266 = lines[1265].strip() if len(lines) > 1265 else "NOT FOUND"
+        if 'f"z.object' in line_1265 and 'f"z.object' in line_1266:
+            print("✅ GENERATOR.PY FIX VERIFIED - Lines 1265-1266 are correct!", flush=True)
+        else:
+            print(f"❌ GENERATOR.PY FIX MISSING!", flush=True)
+            print(f"   Line 1265: {line_1265}", flush=True)
+            print(f"   Line 1266: {line_1266}", flush=True)
+except Exception as e:
+    print(f"⚠️  Could not verify generator.py fix: {e}", flush=True)
+
+print("=" * 80, flush=True)
+print("", flush=True)
+
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
