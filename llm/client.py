@@ -263,7 +263,7 @@ class LLMClient:
         loop = asyncio.get_event_loop()
         
         # Try primary model, fallback to fallback model if configured
-        model_id = settings.GEMINI_MODEL_ID or settings.GEMINI_FALLBACK_MODEL_ID or "gemini-1.5-pro"
+        model_id = settings.GEMINI_MODEL_ID or settings.GEMINI_FALLBACK_MODEL_ID or "gemini-2.5-pro"
         
         try:
             # Check if using new google.genai API (has Client) or old google.generativeai API

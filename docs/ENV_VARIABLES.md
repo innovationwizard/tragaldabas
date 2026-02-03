@@ -19,7 +19,7 @@ OPENAI_MODEL=gpt-4o  # Optional, defaults shown
 ### Google Gemini
 ```env
 GOOGLE_API_KEY=your-google-api-key
-GEMINI_MODEL_ID=gemini-1.5-pro  # Primary model
+GEMINI_MODEL_ID=gemini-2.5-pro  # Primary model
 GEMINI_FALLBACK_MODEL_ID=gemini-2.5-flash  # Fallback model (optional)
 ```
 
@@ -104,7 +104,7 @@ The system will ignore extra variables in `.env` that aren't defined in the Sett
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 GOOGLE_API_KEY=AIzaSy...
-GEMINI_MODEL_ID=gemini-1.5-pro
+GEMINI_MODEL_ID=gemini-2.5-pro
 GEMINI_FALLBACK_MODEL_ID=gemini-2.5-flash
 LLM_PROVIDER_PRIORITY=anthropic,openai,gemini
 

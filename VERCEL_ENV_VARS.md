@@ -65,7 +65,7 @@ LLM_PROVIDER_PRIORITY=anthropic,openai,gemini
 # Model selection (optional, uses defaults if not set)
 ANTHROPIC_MODEL=claude-sonnet-4-20250514
 OPENAI_MODEL=gpt-4o
-GEMINI_MODEL_ID=gemini-1.5-pro
+GEMINI_MODEL_ID=gemini-2.5-pro
 GEMINI_FALLBACK_MODEL_ID=gemini-2.5-flash
 ```
 

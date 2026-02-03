@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # LLM Model Selection
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
     OPENAI_MODEL: str = "gpt-4o"
-    GEMINI_MODEL_ID: Optional[str] = None  # Primary Gemini model (e.g., "gemini-1.5-pro")
+    GEMINI_MODEL_ID: Optional[str] = None  # Primary Gemini model (e.g., "gemini-2.5-pro")
     GEMINI_FALLBACK_MODEL_ID: Optional[str] = None  # Fallback Gemini model (e.g., "gemini-2.5-flash")
     
     # LLM Settings

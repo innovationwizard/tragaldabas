@@ -41,7 +41,7 @@ ANTHROPIC_API_KEY=your-key-here
 OPENAI_API_KEY=your-key-here
 # OR
 GOOGLE_API_KEY=your-key-here
-GEMINI_MODEL_ID=gemini-1.5-pro
+GEMINI_MODEL_ID=gemini-2.5-pro
 GEMINI_FALLBACK_MODEL_ID=gemini-2.5-flash
 
 # Optional: Database connection
