@@ -274,6 +274,39 @@ def serialize_model(model):
     return model
 
 
+def _ensure_storage_path_prefix(user_id: str, job_id: str, path: str) -> str:
+    if path.startswith(f"{user_id}/{job_id}/"):
+        return path
+    return f"{user_id}/{job_id}/{path.lstrip('/')}"
+
+
+def upload_json_to_storage(user_id: str, job_id: str, storage_path: str, payload: Dict[str, Any]) -> str:
+    """Upload a JSON payload to Supabase Storage and return the path."""
+    if not supabase:
+        raise RuntimeError("Supabase client not initialized")
+    full_path = _ensure_storage_path_prefix(user_id, job_id, storage_path)
+    data = json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    supabase.storage.from_("uploads").upload(
+        path=full_path,
+        file=data,
+        file_options={"content-type": "application/json", "upsert": "true"},
+    )
+    return full_path
+
+
+def load_json_from_storage(storage_path: str) -> Optional[Dict[str, Any]]:
+    """Load a JSON payload from Supabase Storage."""
+    if not supabase:
+        raise RuntimeError("Supabase client not initialized")
+    file_data = supabase.storage.from_("uploads").download(storage_path)
+    if file_data is None:
+        return None
+    content = file_data if isinstance(file_data, bytes) else file_data.read()
+    if not content:
+        return None
+    return json.loads(content.decode("utf-8"))
+
+
 # Pydantic models for request validation
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -1249,13 +1282,14 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
             "scaffold": serialize_model(ctx.scaffold),
         }
         
-        # Update job with completed status and result
+        # Update job with completed status and result (stored in object storage)
         status_value = "ready_for_genesis" if app_generation else "completed"
         print(f"💾 Updating job {job_id} to completed status with result", flush=True)
         try:
+            result_path = upload_json_to_storage(user_id, job_id, "results/result.json", result)
             await update_job_in_db(job_id, {
                 "status": status_value,
-                "result": result
+                "result": {"storage_path": result_path}
             })
             print(f"✅ Successfully updated job {job_id} to {status_value}", flush=True)
         except Exception as update_error:
@@ -1459,7 +1493,8 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
                 "generated_project": serialize_model(ctx.generated_project),
                 "scaffold": serialize_model(ctx.scaffold),
             })
-            await update_job_in_db(job_id, {"result": base_result})
+            result_path = upload_json_to_storage(user_id, job_id, "results/result.json", base_result)
+            await update_job_in_db(job_id, {"result": {"storage_path": result_path}})
 
         def _needs_stage(stage_num: int) -> bool:
             if stage_num == 8 and ctx.cell_classification is None:
@@ -1497,7 +1532,8 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
             ctx.scaffold = await orchestrator._execute_stage(12, ctx.generated_project)
             await _persist_stage_result()
 
-        await update_job_in_db(job_id, {"status": "completed", "result": base_result})
+        result_path = upload_json_to_storage(user_id, job_id, "results/result.json", base_result)
+        await update_job_in_db(job_id, {"status": "completed", "result": {"storage_path": result_path}})
         print(f"✅ Job {job_id} updated with genesis results", flush=True)
 
     except Exception as e:
@@ -1602,7 +1638,9 @@ async def run_etl_job(job_id: str, file_path: str, user_id: str):
             db_connection_string=target_db_url
         )
         ctx = await orchestrator.run_etl_only(file_path)
-        await update_job_in_db(job_id, {"etl_result": serialize_model(ctx.etl)})
+        etl_payload = serialize_model(ctx.etl) or {}
+        etl_path = upload_json_to_storage(user_id, job_id, "etl/etl_result.json", etl_payload)
+        await update_job_in_db(job_id, {"etl_result": {"storage_path": etl_path}})
     except Exception as e:
         error_msg = str(e)
         await update_job_in_db(job_id, {
@@ -1880,7 +1918,25 @@ async def get_job(job_id: str, user: dict = Depends(get_current_user)):
     
     if job.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
+    result = job.get("result")
+    if isinstance(result, dict) and result.get("storage_path"):
+        try:
+            loaded = load_json_from_storage(result["storage_path"])
+            if loaded is not None:
+                job["result"] = loaded
+        except Exception as e:
+            print(f"⚠️ Failed to load result from storage: {e}", flush=True)
+
+    etl_result = job.get("etl_result")
+    if isinstance(etl_result, dict) and etl_result.get("storage_path"):
+        try:
+            loaded = load_json_from_storage(etl_result["storage_path"])
+            if loaded is not None:
+                job["etl_result"] = loaded
+        except Exception as e:
+            print(f"⚠️ Failed to load etl_result from storage: {e}", flush=True)
+
     return job
 
 
@@ -1931,6 +1987,8 @@ async def download_output(job_id: str, file_type: str, user: dict = Depends(get_
         raise HTTPException(status_code=400, detail="Job not completed yet")
     
     result = job.get("result")
+    if isinstance(result, dict) and result.get("storage_path"):
+        result = load_json_from_storage(result["storage_path"])
     if not result:
         raise HTTPException(status_code=404, detail="Job result not found")
     
