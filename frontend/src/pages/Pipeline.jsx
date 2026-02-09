@@ -21,6 +21,8 @@ const STAGES = [
   { num: 12, name: 'Speciation', description: 'Eclosioning new breed' },
 ]
 
+const SHOW_GENESIS_UI = false
+
 const Pipeline = () => {
   const { jobId } = useParams()
   const [job, setJob] = useState(null)
@@ -343,9 +345,6 @@ const Pipeline = () => {
             {retryError && (
               <p className="text-error-text mt-2">{retryError}</p>
             )}
-            {genesisRetryError && (
-              <p className="text-error-text mt-2">{genesisRetryError}</p>
-            )}
             <div className="mt-4">
               <div className="flex flex-wrap gap-3">
                 <button
@@ -355,23 +354,12 @@ const Pipeline = () => {
                 >
                   {retryLoading ? 'Retrying...' : 'Retry'}
                 </button>
-                {job?.app_generation && (job?.completed_stages || []).includes(7) && (
-                  <button
-                    className="btn-primary"
-                    onClick={() => {
-                      setGenesisRetryError('')
-                      setShowGenesisModal(true)
-                    }}
-                  >
-                    Retry Genesis
-                  </button>
-                )}
               </div>
             </div>
           </div>
         )}
 
-        {job?.status === 'pending_genesis' && (
+        {SHOW_GENESIS_UI && job?.status === 'pending_genesis' && (
           <div className="card mb-6 bg-yellow-900/20 border border-yellow-600/30">
             <p className="text-yellow-200">Genesis is pending. If it's been stuck for a while, you can retry to restart the genesis process.</p>
             {genesisRetryError && (
@@ -394,7 +382,7 @@ const Pipeline = () => {
 
         <div className="card">
           <div className="space-y-6">
-            {STAGES.map((stage) => {
+            {(SHOW_GENESIS_UI ? STAGES : STAGES.filter((stage) => stage.num <= 7)).map((stage) => {
               const status = getStageStatus(stage.num)
               return (
                 <div key={stage.num} className="flex items-start space-x-4">
@@ -434,7 +422,7 @@ const Pipeline = () => {
           </div>
         </div>
 
-        {job?.status === 'awaiting_genesis' && job?.app_generation && (
+        {SHOW_GENESIS_UI && job?.status === 'awaiting_genesis' && job?.app_generation && (
           <div className="mt-6 text-center">
             <button
               className="btn-primary"
@@ -447,7 +435,7 @@ const Pipeline = () => {
             </p>
           </div>
         )}
-        {job?.status === 'ready_for_genesis' && job?.app_generation && (
+        {SHOW_GENESIS_UI && job?.status === 'ready_for_genesis' && job?.app_generation && (
           <div className="mt-6 text-center">
             <p className="text-brand-muted text-sm">
               Waiting for all files in this batch to finish stage 7.
@@ -536,7 +524,7 @@ const Pipeline = () => {
           </div>
         )}
 
-        {showGenesisModal && (
+        {SHOW_GENESIS_UI && showGenesisModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
             <div className="card w-full max-w-md">
               <h2 className="text-xl font-semibold mb-2">Are you sure?</h2>

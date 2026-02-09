@@ -120,7 +120,7 @@ const Results = () => {
     )
   }
 
-  if (!job || (job.status !== 'completed' && job.status !== 'awaiting_genesis' && job.status !== 'ready_for_genesis')) {
+  if (!job || job.status !== 'completed') {
     return (
       <Layout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -189,13 +189,7 @@ const Results = () => {
                   </div>
                   <div className="card bg-brand-bg">
                     <h3 className="font-semibold mb-2">Status</h3>
-                    <p className="text-brand-primary">
-                      {job.status === 'awaiting_genesis'
-                        ? 'Genesis pending'
-                        : job.status === 'ready_for_genesis'
-                          ? 'Waiting for batch readiness'
-                          : 'Digested'}
-                    </p>
+                    <p className="text-brand-primary">Digested</p>
                   </div>
                 </div>
                 {job.batch_id && (

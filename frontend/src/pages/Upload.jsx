@@ -6,9 +6,9 @@ import Layout from '../components/Layout'
 const Upload = () => {
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
-  const [generateApp, setGenerateApp] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
+  const generateApp = false
 
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files || [])
@@ -39,11 +39,6 @@ const Upload = () => {
     if (invalid) {
       setError('Invalid file type. Please upload Excel, CSV, Word, or audio files.')
       return
-    }
-
-    const hasNonExcel = selectedFiles.some((item) => !item.name.match(/\.(xlsx|xls)$/i))
-    if (hasNonExcel) {
-      setGenerateApp(false)
     }
 
     setFiles(selectedFiles)
@@ -150,18 +145,6 @@ const Upload = () => {
                 </label>
               </div>
             </div>
-
-            {files.length > 0 && files.every((item) => item.name.match(/\.(xlsx|xls)$/i)) && (
-              <label className="flex items-center gap-3 text-sm text-brand-muted">
-                <input
-                  type="checkbox"
-                  checked={generateApp}
-                  onChange={(e) => setGenerateApp(e.target.checked)}
-                  className="h-4 w-4 rounded border-brand-border bg-transparent text-brand-accent focus:ring-brand-accent"
-                />
-                TRIGGER NEUROGENESIS
-              </label>
-            )}
 
             {files.length > 1 && (
               <div className="border border-brand-border rounded-lg p-4 bg-brand-bg">
