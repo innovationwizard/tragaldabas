@@ -109,6 +109,18 @@ const Pipeline = () => {
       const response = await axios.get(`/api/pipeline/jobs/${jobId}/status`, { headers })
       const status = response.data
       
+      // Merge status into job state so UI updates (getStageStatus reads job.completed_stages)
+      setJob((prev) => prev ? {
+        ...prev,
+        status: status.status,
+        current_stage: status.current_stage,
+        current_stage_name: status.current_stage_name,
+        completed_stages: status.completed_stages ?? prev.completed_stages,
+        failed_stage: status.failed_stage,
+        error: status.error,
+        updated_at: status.updated_at
+      } : prev)
+      
       // Update current stage from status
       if (status.current_stage !== null && status.current_stage !== undefined) {
         setCurrentStage({ 
@@ -119,9 +131,10 @@ const Pipeline = () => {
       
       // If job completed, stop polling and redirect
       if (status.status === 'completed') {
-        if (pollingInterval) {
-          clearInterval(pollingInterval)
-        }
+        setPollingInterval((prev) => {
+          if (prev) clearInterval(prev)
+          return null
+        })
         fetchJob() // Get full job data
         setTimeout(() => {
           window.location.href = `/results/${jobId}`
@@ -129,9 +142,10 @@ const Pipeline = () => {
       } else if (status.status === 'awaiting_genesis' || status.status === 'ready_for_genesis') {
         fetchJob()
       } else if (status.status === 'failed') {
-        if (pollingInterval) {
-          clearInterval(pollingInterval)
-        }
+        setPollingInterval((prev) => {
+          if (prev) clearInterval(prev)
+          return null
+        })
         fetchJob() // Get full job data with error
       }
     } catch (error) {
@@ -140,10 +154,10 @@ const Pipeline = () => {
   }
 
   const startPolling = () => {
-    // Poll every 5 seconds while job is running
+    // Poll every 2 seconds for responsive progress updates
     const interval = setInterval(() => {
       pollJobStatus()
-    }, 5000)
+    }, 2000)
     setPollingInterval(interval)
   }
 

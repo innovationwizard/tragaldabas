@@ -2131,6 +2131,7 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
         "current_stage": job.get("current_stage"),
         "current_stage_name": job.get("current_stage_name"),
         "completed_stages": job.get("completed_stages", []) or [],
+        "failed_stage": job.get("failed_stage"),
         "error": job.get("error"),
         "updated_at": job.get("updated_at")
     }
