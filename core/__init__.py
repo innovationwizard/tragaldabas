@@ -25,6 +25,7 @@ __all__ = [
     "ETLResult",
     "Evidence",
     "Insight",
+    "GeniusInsight",
     "AnalysisResult",
     "OutputResult",
     # Enums

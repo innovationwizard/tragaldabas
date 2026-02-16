@@ -60,6 +60,22 @@ class OutputManager(Stage[AnalysisResult, OutputResult]):
             "=" * 50,
             ""
         ]
+
+        # The Genius Move (Alpha Strike)
+        if analysis.genius_insight and analysis.genius_insight.thesis:
+            g = analysis.genius_insight
+            lines.append("THE GENIUS MOVE (Strategic Alpha)")
+            lines.append("-" * 40)
+            lines.append(f"Thesis: {g.thesis}")
+            if g.mechanism:
+                lines.append(f"Mechanism: {g.mechanism}")
+            if g.market_confluence:
+                lines.append(f"Market Confluence: {g.market_confluence}")
+            if g.estimated_upside:
+                lines.append(f"Estimated Upside: {g.estimated_upside}")
+            if g.kill_switch:
+                lines.append(f"Kill Switch: {g.kill_switch}")
+            lines.append("")
         
         # Top insights
         for i, insight in enumerate(analysis.insights[:5], 1):
@@ -96,6 +112,22 @@ class OutputManager(Stage[AnalysisResult, OutputResult]):
             "## Executive Summary",
             ""
         ]
+
+        # The Genius Move (Alpha Strike)
+        if analysis.genius_insight and analysis.genius_insight.thesis:
+            g = analysis.genius_insight
+            lines.append("### ⚡ The Genius Move (Strategic Alpha)")
+            lines.append("")
+            lines.append(f"**Thesis:** {g.thesis}")
+            if g.mechanism:
+                lines.append(f"**Mechanism:** {g.mechanism}")
+            if g.market_confluence:
+                lines.append(f"**Market Confluence:** {g.market_confluence}")
+            if g.estimated_upside:
+                lines.append(f"**Estimated Upside:** {g.estimated_upside}")
+            if g.kill_switch:
+                lines.append(f"**Kill Switch:** {g.kill_switch}")
+            lines.append("")
         
         for i, insight in enumerate(analysis.insights[:5], 1):
             lines.append(f"{i}. **{insight.headline}**")
@@ -147,6 +179,28 @@ class OutputManager(Stage[AnalysisResult, OutputResult]):
             title.text = "Executive Summary"
             tf = content.text_frame
             tf.text = "Key Findings:"
+
+            # The Genius Move slide (Alpha Strike)
+            if analysis.genius_insight and analysis.genius_insight.thesis:
+                slide = prs.slides.add_slide(prs.slide_layouts[1])
+                title = slide.shapes.title
+                content = slide.placeholders[1]
+                title.text = "The Genius Move"
+                tf = content.text_frame
+                g = analysis.genius_insight
+                tf.text = g.thesis
+                if g.mechanism:
+                    p = tf.add_paragraph()
+                    p.text = g.mechanism
+                    p.level = 1
+                if g.estimated_upside:
+                    p = tf.add_paragraph()
+                    p.text = f"Upside: {g.estimated_upside}"
+                    p.level = 1
+                if g.kill_switch:
+                    p = tf.add_paragraph()
+                    p.text = f"Kill Switch: {g.kill_switch}"
+                    p.level = 1
             
             for insight in analysis.insights[:5]:
                 p = tf.add_paragraph()

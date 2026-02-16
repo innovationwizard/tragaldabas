@@ -213,12 +213,22 @@ class Insight(BaseModel):
     included: bool = True  # Passes relevancy filter
 
 
+class GeniusInsight(BaseModel):
+    """Strategic Alpha: single high-impact 'Genius Move' from Synthetic Board of Directors"""
+    thesis: str = ""  # Bold contrarian statement about where the money is
+    mechanism: str = ""  # Step 1, 2, 3 - how to extract the value
+    market_confluence: str = ""  # Why this matters now based on 2026 market trends
+    estimated_upside: str = ""  # Dollar amount or % margin expansion (even if speculative)
+    kill_switch: str = ""  # The one thing that could make this strategy fail
+
+
 class AnalysisResult(BaseModel):
     """Complete Stage 6 output"""
     domain: Domain
     metrics_computed: list[str] = []
     patterns_detected: list[str] = []
     insights: list[Insight] = []
+    genius_insight: Optional[GeniusInsight] = None  # Alpha Strike: "The Genius Move"
 
 
 # ─────────────────────────────────────────────────────────────

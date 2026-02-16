@@ -256,6 +256,47 @@ const Results = () => {
             {activeTab === 'analysis' && result.analysis && (
               <div>
                 <h2 className="text-2xl font-semibold mb-4">Analysis</h2>
+
+                {result.analysis.genius_insight && (result.analysis.genius_insight.thesis || result.analysis.genius_insight.mechanism) && (
+                  <div className="mb-8 p-6 rounded-xl border-2 border-amber-500/50 bg-amber-950/20">
+                    <h3 className="text-xl font-bold text-amber-400 mb-4 flex items-center gap-2">
+                      <span>⚡</span> The Genius Move
+                    </h3>
+                    <div className="space-y-4 text-brand-text">
+                      {result.analysis.genius_insight.thesis && (
+                        <div>
+                          <p className="text-brand-muted text-sm font-medium mb-1">Thesis</p>
+                          <p className="font-semibold">{result.analysis.genius_insight.thesis}</p>
+                        </div>
+                      )}
+                      {result.analysis.genius_insight.mechanism && (
+                        <div>
+                          <p className="text-brand-muted text-sm font-medium mb-1">Mechanism</p>
+                          <p className="whitespace-pre-line">{result.analysis.genius_insight.mechanism}</p>
+                        </div>
+                      )}
+                      {result.analysis.genius_insight.market_confluence && (
+                        <div>
+                          <p className="text-brand-muted text-sm font-medium mb-1">Market Confluence</p>
+                          <p>{result.analysis.genius_insight.market_confluence}</p>
+                        </div>
+                      )}
+                      {result.analysis.genius_insight.estimated_upside && (
+                        <div>
+                          <p className="text-brand-muted text-sm font-medium mb-1">Estimated Upside</p>
+                          <p className="text-amber-400 font-semibold">{result.analysis.genius_insight.estimated_upside}</p>
+                        </div>
+                      )}
+                      {result.analysis.genius_insight.kill_switch && (
+                        <div>
+                          <p className="text-brand-muted text-sm font-medium mb-1">The Kill Switch</p>
+                          <p className="text-red-300/90 italic">{result.analysis.genius_insight.kill_switch}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {result.analysis.domain && (
                   <div className="mb-4">
                     <span className="text-brand-muted">Domain: </span>

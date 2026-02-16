@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # Insights
     MIN_VARIANCE_FOR_INSIGHT: float = 0.1  # 10%
     MAX_INSIGHTS_PER_ANALYSIS: int = 10
+
+    # Alpha Strike (Strategic Alpha / Genius Move)
+    ALPHA_STRIKE_ENABLED: bool = True
     
     # Authentication
     JWT_SECRET_KEY: Optional[str] = None  # Auto-generated if not set

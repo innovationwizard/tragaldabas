@@ -97,6 +97,16 @@ class Orchestrator:
                 "etl": ctx.etl,
                 "domain": ctx.classification.domain
             })
+
+            # Alpha Strike: Strategic Alpha / Genius Move (post-analysis enrichment)
+            if settings.ALPHA_STRIKE_ENABLED and ctx.analysis:
+                from stages.alpha_strike import AlphaStrikeEngine
+                engine = AlphaStrikeEngine()
+                ctx.analysis = await engine.run(
+                    ctx.analysis,
+                    etl=ctx.etl,
+                    domain=ctx.classification.domain,
+                )
             
             # Stage 7: Output
             ctx.output = await self._execute_stage(7, ctx.analysis)

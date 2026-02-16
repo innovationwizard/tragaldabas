@@ -71,6 +71,7 @@ VALIDATION_FAILURE_THRESHOLD=0.1  # Max failure rate before warning (0-1)
 ```env
 MIN_VARIANCE_FOR_INSIGHT=0.1  # Minimum variance to include insight (10%)
 MAX_INSIGHTS_PER_ANALYSIS=10  # Maximum insights per analysis
+ALPHA_STRIKE_ENABLED=true    # Strategic Alpha / Genius Move (default: true)
 ```
 
 ## Output Configuration
