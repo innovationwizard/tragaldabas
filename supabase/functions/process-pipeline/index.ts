@@ -93,7 +93,7 @@ serve(async (req) => {
     
     console.log(`Calling processing endpoint: ${processingUrl}`)
     
-    // Use RAILWAY_API_KEY for Railway worker, supabaseServiceKey for Vercel API
+    // Use RAILWAY_API_KEY for Railway worker, API_AUTH_TOKEN or supabaseServiceKey for Vercel API
     let authToken
     if (WORKER_URL) {
       // Railway worker - require RAILWAY_API_KEY, never use service role key
@@ -103,8 +103,8 @@ serve(async (req) => {
       }
       authToken = railwayKey
     } else {
-      // Vercel API - use service role key
-      authToken = supabaseServiceKey
+      // Vercel API - use API_AUTH_TOKEN if available, otherwise supabaseServiceKey
+      authToken = Deno.env.get('API_AUTH_TOKEN') || supabaseServiceKey
     }
     
     // Fire-and-forget worker call with timeout

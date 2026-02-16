@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from openpyxl.utils.cell import coordinate_to_tuple
 
@@ -72,7 +72,9 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
             "src/lib/calculations/index.ts": self._calculations_index(logic),
             "src/lib/calculations/types.ts": self._calculations_types(logic),
         }
-        for calc in logic.calculations:
+        for calc in (logic.calculations or []):
+            if not calc.id:
+                continue
             files[f"src/lib/calculations/{self._calculation_filename(calc.id)}"] = (
                 self._calculation_file(calc)
             )
@@ -581,8 +583,20 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
             "    }",
             "    return base;",
             "  }, []);",
-            "  const [values, setValues] = useState<Record<string, unknown>>({ ...defaults, ...(initialValues || {}) });",
-            "  const [calculationId, setCalculationId] = useState<string>(() => calculationIds[0] ?? '');",
+            "  const normalizedInitials = useMemo(() => {",
+            "    if (!initialValues) return {};",
+            "    const mapped: Record<string, unknown> = {};",
+            "    for (const field of inputFields) {",
+            "      if (Object.prototype.hasOwnProperty.call(initialValues, field.id)) {",
+            "        mapped[field.id] = (initialValues as any)[field.id];",
+            "      } else if (Object.prototype.hasOwnProperty.call(initialValues, field.address)) {",
+            "        mapped[field.id] = (initialValues as any)[field.address];",
+            "      }",
+            "    }",
+            "    return mapped;",
+            "  }, [initialValues]);",
+            "  const [values, setValues] = useState<Record<string, unknown>>({ ...defaults, ...normalizedInitials });",
+            "  const [calculationId, setCalculationId] = useState<string>(() => (calculationIds.length > 0 ? calculationIds[0] : ''));",
             "  const [scenarioName, setScenarioName] = useState<string>('');",
             "  const activeMeta = calculationId ? calculationMeta[calculationId] : null;",
             "  const [errors, setErrors] = useState<Record<string, string>>({});",
@@ -1085,13 +1099,13 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
             "import type { CalculationFn } from './types';",
             "",
         ]
-        for calc in input_data.calculations:
+        for calc in (input_data.calculations or []):
             fn_name = self._calculation_function_name(calc.id)
             file_name = self._calculation_filename(calc.id).replace(".ts", "")
             lines.append(f"import {{ {fn_name} }} from './{file_name}';")
         lines.append("")
         lines.append("export const calculations: Record<string, CalculationFn> = {")
-        for calc in input_data.calculations:
+        for calc in (input_data.calculations or []):
             fn_name = self._calculation_function_name(calc.id)
             lines.append(f"  \"{calc.id}\": {fn_name},")
         lines.append("};")
@@ -1099,7 +1113,7 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
         return "\n".join(lines)
 
     def _calculations_types(self, input_data: LogicExtractionResult) -> str:
-        ids = [calc.id for calc in input_data.calculations]
+        ids = [calc.id for calc in (input_data.calculations or [])]
         union = " | ".join([f'\"{calc_id}\"' for calc_id in ids]) or "string"
         return "\n".join([
             f"export type CalculationId = {union};",
@@ -1279,7 +1293,7 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
             "",
             f"export const inputFields: InputField[] = {json.dumps(inputs, indent=2)};",
             f"export const outputFields = {json.dumps(outputs, indent=2)};",
-            f"export const calculationIds = {json.dumps([calc.id for calc in input_data.calculations], indent=2)};",
+            f"export const calculationIds = {json.dumps([calc.id for calc in (input_data.calculations or [])], indent=2)};",
             f"export const calculationMeta: Record<string, {{ name: string; description?: string; outputs?: string[]; constraints?: string[] }}> = {json.dumps(meta, indent=2)};",
             f"export const inputSchema = {schema};",
             f"export const outputSchema = {output_schema};",
@@ -1297,12 +1311,17 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
         rule_map = {rule.id: rule for rule in logic.business_rules}
         input_by_address = {str(field.get("address")): field for field in inputs}
         output_by_address = {str(field.get("address")): field for field in outputs}
-        node_map = dependency_graph.nodes if dependency_graph else {}
+        node_map = {}
+        if dependency_graph and hasattr(dependency_graph, "nodes"):
+            node_map = dependency_graph.nodes or {}
         clusters = []
 
         def cluster_depth(cluster) -> int:
             depths = []
-            for addr in cluster.inputs + cluster.outputs + cluster.intermediates:
+            cluster_inputs = getattr(cluster, "inputs", []) or []
+            cluster_outputs = getattr(cluster, "outputs", []) or []
+            cluster_intermediates = getattr(cluster, "intermediates", []) or []
+            for addr in cluster_inputs + cluster_outputs + cluster_intermediates:
                 node = node_map.get(addr)
                 if node:
                     depths.append(node.depth)
@@ -1310,8 +1329,12 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
 
         for cluster in (dependency_graph.clusters if dependency_graph else []):
             rule = rule_map.get(cluster.id)
-            cluster_inputs = [addr for addr in cluster.inputs if addr in input_by_address]
-            cluster_outputs = [addr for addr in cluster.outputs if addr in output_by_address]
+            cluster_inputs = [
+                addr for addr in (getattr(cluster, "inputs", []) or []) if addr in input_by_address
+            ]
+            cluster_outputs = [
+                addr for addr in (getattr(cluster, "outputs", []) or []) if addr in output_by_address
+            ]
             sheet_names = sorted({addr.split("!", 1)[0] for addr in cluster_inputs + cluster_outputs})
             sections = sorted({
                 str(input_by_address[addr].get("section", "General"))
@@ -1616,10 +1639,13 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
         label_map: Dict[str, Dict[Tuple[int, int], str]] = {}
         structural_rows: Dict[str, List[Tuple[int, str]]] = {}
         inferred_types: Dict[str, str] = {}
+        output_semantic_labels: Dict[str, str] = {}
         for rule in logic.business_rules:
             for rule_output in rule.outputs:
                 if rule_output.data_type:
                     inferred_types[rule_output.name] = rule_output.data_type
+                if rule_output.description:
+                    output_semantic_labels[rule_output.name] = rule_output.description
 
         for sheet in classification.sheets:
             sheet_labels: Dict[Tuple[int, int], str] = {}
@@ -1720,7 +1746,7 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
     def _calculation_file(self, calc) -> str:
         fn_name = self._calculation_function_name(calc.id)
         inputs = ", ".join(calc.inputs) if calc.inputs else "none"
-        formula = calc.formulas[0].raw if calc.formulas else ""
+        formula = calc.formulas[0].raw if calc.formulas and len(calc.formulas) > 0 else ""
         expression = self._translate_formula(formula, calc.id)
         return "\n".join([
             "import type { CalculationFn } from './types';",
@@ -1977,6 +2003,37 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
             "  const list = flatten([range]);",
             "  return list.reduce((acc, value) => acc + (matchesCriteria(value, criteria) ? 1 : 0), 0);",
             "};",
+            "const countIfs = (...criteriaPairs: unknown[]) => {",
+            "  const pairs: Array<{ range: unknown[]; criteria: unknown }> = [];",
+            "  for (let i = 0; i < criteriaPairs.length; i += 2) {",
+            "    pairs.push({ range: flatten([criteriaPairs[i]]), criteria: criteriaPairs[i + 1] });",
+            "  }",
+            "  if (!pairs.length) return 0;",
+            "  const maxLen = Math.max(...pairs.map((pair) => pair.range.length));",
+            "  let total = 0;",
+            "  for (let idx = 0; idx < maxLen; idx += 1) {",
+            "    const matches = pairs.every((pair) => matchesCriteria(pair.range[idx], pair.criteria));",
+            "    if (matches) total += 1;",
+            "  }",
+            "  return total;",
+            "};",
+            "const averageIfs = (avgRange: unknown, ...criteriaPairs: unknown[]) => {",
+            "  const averages = flatten([avgRange]);",
+            "  const pairs: Array<{ range: unknown[]; criteria: unknown }> = [];",
+            "  for (let i = 0; i < criteriaPairs.length; i += 2) {",
+            "    pairs.push({ range: flatten([criteriaPairs[i]]), criteria: criteriaPairs[i + 1] });",
+            "  }",
+            "  let total = 0;",
+            "  let count = 0;",
+            "  averages.forEach((value, idx) => {",
+            "    const matches = pairs.every((pair) => matchesCriteria(pair.range[idx], pair.criteria));",
+            "    if (matches) {",
+            "      total += toNumber(value);",
+            "      count += 1;",
+            "    }",
+            "  });",
+            "  return count ? total / count : 0;",
+            "};",
             "const xlookup = (lookup: unknown, lookupArray: unknown, returnArray: unknown, notFound: unknown = null) => {",
             "  const lookupList = flatten([lookupArray]);",
             "  const returnList = flatten([returnArray]);",
@@ -1992,7 +2049,7 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
             f"// Inputs: {inputs}",
             f"// Output: {calc.id}",
             f"export const {fn_name}: CalculationFn = (inputs) => {{",
-            f"  const required = {json.dumps(calc.inputs)};",
+            f"  const required = {json.dumps(calc.inputs if calc.inputs else [])};",
             "  const missing = required.filter((addr) => {",
             "    const value = getValue(addr, inputs);",
             "    return value === null || value === undefined || value === '';",
@@ -2120,9 +2177,13 @@ class CodeGenerator(Stage[AppGenerationContext, GeneratedProject]):
             "VLOOKUP": "vlookup",
             "XLOOKUP": "xlookup",
             "COUNTIF": "countIf",
+            "COUNTIFS": "countIfs",
+            "AVERAGEIFS": "averageIfs",
         }
         for excel_name, js_name in replacements.items():
-            expr = re.sub(rf"\\b{excel_name}\\s*\\(", f"{js_name}(", expr, flags=re.IGNORECASE)
+            # Escape excel_name and build pattern without raw string to avoid regex conflicts
+            pattern = r"\b" + re.escape(excel_name) + r"\s*\("
+            expr = re.sub(pattern, f"{js_name}(", expr, flags=re.IGNORECASE)
         return expr
 
     def _replace_operators(self, expr: str) -> str:

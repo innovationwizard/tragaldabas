@@ -109,7 +109,8 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
                 if test:
                     test_suite.append(test)
 
-        business_rules = await self._enrich_with_llm(business_rules)
+        # DISABLED: LLM enrichment causes expensive API calls and I/O deadlocks
+        # business_rules = await self._enrich_with_llm(business_rules)
 
         return LogicExtractionResult(
             business_rules=business_rules,
@@ -783,11 +784,15 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
         if ntype == "range":
             return self._range_values(node.get("value"), inputs, context)
         if ntype == "unary":
-            return -self._evaluate_ast(node.get("value", {}), inputs, context)
+            value = self._evaluate_ast(node.get("value", {}), inputs, context)
+            return -self._coerce_number(value)
         if ntype == "binary":
             left = self._evaluate_ast(node.get("left", {}), inputs, context)
             right = self._evaluate_ast(node.get("right", {}), inputs, context)
             op = node.get("operator")
+            if op in {"+", "-", "*", "/", "^"}:
+                left = self._coerce_number(left)
+                right = self._coerce_number(right)
             if op == "+":
                 return left + right
             if op == "-":
@@ -799,16 +804,34 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
             if op == "^":
                 return left ** right
             if op == "=":
+                if isinstance(left, (list, str)) or isinstance(right, (list, str)):
+                    left = self._coerce_number(left)
+                    right = self._coerce_number(right)
                 return left == right
             if op == "<>":
+                if isinstance(left, (list, str)) or isinstance(right, (list, str)):
+                    left = self._coerce_number(left)
+                    right = self._coerce_number(right)
                 return left != right
             if op == ">":
+                if isinstance(left, (list, str)) or isinstance(right, (list, str)):
+                    left = self._coerce_number(left)
+                    right = self._coerce_number(right)
                 return left > right
             if op == "<":
+                if isinstance(left, (list, str)) or isinstance(right, (list, str)):
+                    left = self._coerce_number(left)
+                    right = self._coerce_number(right)
                 return left < right
             if op == ">=":
+                if isinstance(left, (list, str)) or isinstance(right, (list, str)):
+                    left = self._coerce_number(left)
+                    right = self._coerce_number(right)
                 return left >= right
             if op == "<=":
+                if isinstance(left, (list, str)) or isinstance(right, (list, str)):
+                    left = self._coerce_number(left)
+                    right = self._coerce_number(right)
                 return left <= right
             if op == "&":
                 return f"{left}{right}"
@@ -818,7 +841,7 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
             if name == "SUM":
                 return self._sum_values(args)
             if name == "IF":
-                return args[1] if args and args[0] else (args[2] if len(args) > 2 else 0)
+                return args[1] if len(args) > 1 and args[0] else (args[2] if len(args) > 2 else 0)
             if name == "AVERAGE":
                 values = self._flatten(args)
                 return sum(values) / len(values) if values else 0
@@ -829,15 +852,19 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
                 values = self._flatten(args)
                 return max(values) if values else 0
             if name == "ROUND":
-                return round(args[0], int(args[1]) if len(args) > 1 else 0)
+                value = self._coerce_number(args[0])
+                digits = int(self._coerce_number(args[1])) if len(args) > 1 else 0
+                return round(value, digits)
             if name == "ROUNDUP":
-                digits = int(args[1]) if len(args) > 1 else 0
+                value = self._coerce_number(args[0])
+                digits = int(self._coerce_number(args[1])) if len(args) > 1 else 0
                 factor = 10 ** digits
-                return (int(args[0] * factor + (0 if args[0] < 0 else 0.999999)) / factor)
+                return (int(value * factor + (0 if value < 0 else 0.999999)) / factor)
             if name == "ROUNDDOWN":
-                digits = int(args[1]) if len(args) > 1 else 0
+                value = self._coerce_number(args[0])
+                digits = int(self._coerce_number(args[1])) if len(args) > 1 else 0
                 factor = 10 ** digits
-                return (int(args[0] * factor) / factor)
+                return (int(value * factor) / factor)
             if name == "CONCAT" or name == "CONCATENATE":
                 return "".join([str(v) for v in self._flatten(args)])
             if name == "SUMIF":
@@ -853,11 +880,13 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
             if name == "DATE":
                 if len(args) >= 3:
                     return self._excel_serial_from_date(
-                        int(args[0]), int(args[1]), int(args[2])
+                        int(self._coerce_number(args[0])),
+                        int(self._coerce_number(args[1])),
+                        int(self._coerce_number(args[2])),
                     )
                 return 0
             if name in {"YEAR", "MONTH", "DAY"}:
-                value = args[0] if args else 0
+                value = self._coerce_number(args[0]) if args else 0
                 date = self._date_from_value(value)
                 if name == "YEAR":
                     return date[0]
@@ -882,14 +911,32 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
     def _flatten(self, args: List[Any]) -> List[float]:
         values: List[float] = []
         for arg in args:
-            if isinstance(arg, list):
-                values.extend(self._flatten(arg))
+            if hasattr(arg, "tolist"):
+                try:
+                    arg = arg.tolist()
+                except Exception:
+                    pass
+            if isinstance(arg, (list, tuple, set)):
+                values.extend(self._flatten(list(arg)))
             else:
                 try:
                     values.append(float(arg))
                 except Exception:
                     values.append(0.0)
         return values
+
+    def _coerce_number(self, value: Any) -> float:
+        if hasattr(value, "tolist"):
+            try:
+                value = value.tolist()
+            except Exception:
+                pass
+        if isinstance(value, (list, tuple, set)):
+            return float(sum(self._flatten(list(value))))
+        try:
+            return float(value)
+        except Exception:
+            return 0.0
 
     def _sum_values(self, args: List[Any]) -> float:
         return sum(self._flatten(args))
@@ -1073,7 +1120,7 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
         if len(args) < 2:
             return 0
         values = self._flatten([args[0]])
-        row = int(args[1]) - 1
+        row = int(self._coerce_number(args[1])) - 1
         if row < 0 or row >= len(values):
             return 0
         return values[row]
@@ -1098,8 +1145,16 @@ class LogicExtractor(Stage[DependencyGraph, LogicExtractionResult]):
         lookup_array = self._flatten([args[1]])
         return_array = self._flatten([args[2]])
         not_found = args[3] if len(args) > 3 else 0
-        match_mode = int(args[4]) if len(args) > 4 and str(args[4]).strip() != "" else 0
-        search_mode = int(args[5]) if len(args) > 5 and str(args[5]).strip() != "" else 1
+        match_mode = (
+            int(self._coerce_number(args[4]))
+            if len(args) > 4 and str(args[4]).strip() != ""
+            else 0
+        )
+        search_mode = (
+            int(self._coerce_number(args[5]))
+            if len(args) > 5 and str(args[5]).strip() != ""
+            else 1
+        )
 
         indices = range(len(lookup_array))
         if search_mode == -1:

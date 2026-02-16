@@ -16,6 +16,7 @@ from datetime import datetime
 import re
 import logging
 import httpx
+import json
 
 try:
     from supabase import create_client, Client
@@ -282,6 +283,7 @@ def _ensure_storage_path_prefix(user_id: str, job_id: str, path: str) -> str:
 
 def upload_json_to_storage(user_id: str, job_id: str, storage_path: str, payload: Dict[str, Any]) -> str:
     """Upload a JSON payload to Supabase Storage and return the path."""
+    import json
     if not supabase:
         raise RuntimeError("Supabase client not initialized")
     full_path = _ensure_storage_path_prefix(user_id, job_id, storage_path)
@@ -296,6 +298,7 @@ def upload_json_to_storage(user_id: str, job_id: str, storage_path: str, payload
 
 def load_json_from_storage(storage_path: str) -> Optional[Dict[str, Any]]:
     """Load a JSON payload from Supabase Storage."""
+    import json
     if not supabase:
         raise RuntimeError("Supabase client not initialized")
     file_data = supabase.storage.from_("uploads").download(storage_path)
@@ -458,7 +461,7 @@ async def register(user_data: RegisterRequest):
 
 # Username to email mapping for test users
 USERNAME_EMAIL_MAP = {
-    "condor": "condor@example.com",
+    "condor": "condor@local.com",
     "estefani": "estefani@example.com",
     "marco": "marco@example.com",
 }
@@ -613,7 +616,7 @@ async def upload_file(
                     edge_function_url,
                     json={"job_id": created_job_id},
                     headers={
-                        "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
                         "Content-Type": "application/json"
                     }
                 ))
@@ -623,7 +626,7 @@ async def upload_file(
                     print(f"❌ Edge Function error: {response}", flush=True)
                     continue
                 if response.status_code != 200:
-                    error_text = await response.text()
+                    error_text = response.text
                     print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
                 else:
                     print(f"✅ Edge Function called successfully for job {created_job_id}", flush=True)
@@ -684,12 +687,12 @@ async def retry_job(
                 edge_function_url,
                 json={"job_id": job_id},
                 headers={
-                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
                     "Content-Type": "application/json"
                 }
             )
             if response.status_code != 200:
-                error_text = await response.text()
+                error_text = response.text
                 print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
                 print(f"⚠️ Falling back to direct process endpoint call", flush=True)
                 # Fallback: call process endpoint directly
@@ -733,7 +736,7 @@ async def retry_job(
                         "job_id": job_id
                     }
                 else:
-                    error_text = await response.text()
+                    error_text = response.text
                     print(f"❌ Railway worker error ({response.status_code}): {error_text}", flush=True)
                     raise HTTPException(status_code=500, detail=f"Railway worker error: {error_text}")
         else:
@@ -830,12 +833,12 @@ async def trigger_batch_etl(
                     edge_function_url,
                     json={"job_id": job["id"], "mode": "etl"},
                     headers={
-                        "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
                         "Content-Type": "application/json"
                     }
                 )
                 if response.status_code != 200:
-                    error_text = await response.text()
+                    error_text = response.text
                     raise HTTPException(status_code=500, detail=f"Failed to trigger ETL: {error_text}")
         return {"message": "ETL triggered", "batch_id": batch_id, "job_ids": [job["id"] for job in jobs]}
     except httpx.TimeoutException:
@@ -904,7 +907,7 @@ async def trigger_genesis(
                         edge_function_url,
                         json={"job_id": j["id"]},
                         headers={
-                            "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
                             "Content-Type": "application/json"
                         }
                     )
@@ -916,7 +919,7 @@ async def trigger_genesis(
                         print(f"❌ Edge Function error for job {j['id']}: {response}", flush=True)
                         continue
                     if response.status_code != 200:
-                        error_text = await response.text()
+                        error_text = response.text
                         raise HTTPException(status_code=500, detail=f"Failed to trigger genesis: {error_text}")
             return {"message": "Genesis triggered", "job_ids": [j["id"] for j in app_jobs], "batch_id": batch_id}
         except httpx.TimeoutException:
@@ -939,12 +942,12 @@ async def trigger_genesis(
                 edge_function_url,
                 json={"job_id": job_id},
                 headers={
-                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
                     "Content-Type": "application/json"
                 }
             )
             if response.status_code != 200:
-                error_text = await response.text()
+                error_text = response.text
                 print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
                 raise HTTPException(status_code=500, detail=f"Failed to trigger genesis: {error_text}")
             print(f"✅ Genesis triggered successfully for job {job_id}", flush=True)
@@ -1022,7 +1025,7 @@ async def retry_genesis(
                         edge_function_url,
                         json={"job_id": j["id"]},
                         headers={
-                            "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
                             "Content-Type": "application/json"
                         }
                     )
@@ -1034,7 +1037,7 @@ async def retry_genesis(
                         print(f"❌ Edge Function error for job {j['id']}: {response}", flush=True)
                         continue
                     if response.status_code != 200:
-                        error_text = await response.text()
+                        error_text = response.text
                         raise HTTPException(status_code=500, detail=f"Failed to retry genesis: {error_text}")
             return {"message": "Genesis retry triggered", "job_ids": [j["id"] for j in app_jobs], "batch_id": batch_id}
         except httpx.TimeoutException:
@@ -1059,12 +1062,12 @@ async def retry_genesis(
                 edge_function_url,
                 json={"job_id": job_id},
                 headers={
-                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
                     "Content-Type": "application/json"
                 }
             )
             if response.status_code != 200:
-                error_text = await response.text()
+                error_text = response.text
                 print(f"❌ Edge Function error ({response.status_code}): {error_text}", flush=True)
                 raise HTTPException(status_code=500, detail=f"Failed to retry genesis: {error_text}")
             print(f"✅ Genesis retry triggered successfully for job {job_id}", flush=True)
@@ -1461,6 +1464,20 @@ async def run_genesis_pipeline(job_id: str, file_path: str, user_id: str):
         base_result = existing.get("result") if isinstance(existing, dict) else {}
         if not isinstance(base_result, dict):
             base_result = {}
+
+        # If result contains storage_path, download the actual result from Supabase Storage
+        if base_result.get("storage_path") and supabase:
+            storage_path = base_result.get("storage_path")
+            print(f"📥 Downloading result from storage: {storage_path}", flush=True)
+            try:
+                result_data = supabase.storage.from_("uploads").download(storage_path)
+                if result_data:
+                    import json
+                    base_result = json.loads(result_data)
+                    print(f"✅ Result loaded from storage ({len(str(base_result))} bytes)", flush=True)
+            except Exception as e:
+                print(f"⚠️ Could not load result from storage: {e}", flush=True)
+                base_result = {}
 
         completed_raw = existing.get("completed_stages", []) or []
         completed = []
