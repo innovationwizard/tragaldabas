@@ -459,22 +459,25 @@ async def register(user_data: RegisterRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# Username to email mapping for test users
+# Username to email mapping for test users (must match seed_users.py)
 USERNAME_EMAIL_MAP = {
-    "condor": "condor@local.com",
+    "condor": "condor@example.com",
     "estefani": "estefani@example.com",
     "marco": "marco@example.com",
 }
 
 @app.post("/api/auth/login")
 async def login(login_data: LoginRequest):
-    """Login user via Supabase Auth using username"""
+    """Login user via Supabase Auth. Accepts email or username."""
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase Auth not configured")
     
     try:
-        # Look up email from username mapping
-        user_email = USERNAME_EMAIL_MAP.get(login_data.username.lower())
+        # If input looks like email, use directly; otherwise look up username
+        if "@" in login_data.username:
+            user_email = login_data.username.strip().lower()
+        else:
+            user_email = USERNAME_EMAIL_MAP.get(login_data.username.lower().strip())
         
         if not user_email:
             raise HTTPException(status_code=401, detail="Invalid username or password")
