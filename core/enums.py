@@ -9,6 +9,8 @@ class FileType(str, Enum):
     EXCEL_XLS = "xls"
     CSV = "csv"
     WORD_DOCX = "docx"
+    MARKDOWN = "md"
+    PLAIN_TEXT = "txt"
     AUDIO = "audio"
 
 

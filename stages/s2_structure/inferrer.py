@@ -35,10 +35,31 @@ class StructureInferrer(Stage[ReceptionResult, StructureResult]):
         relationships = []
         
         for preview in input_data.previews:
-            df = input_data.raw_data.get(preview.sheet_name)
-            if df is None or not isinstance(df, pd.DataFrame):
+            raw = input_data.raw_data.get(preview.sheet_name)
+            # Narrative: raw is str; structured: raw is DataFrame
+            if raw is None:
                 continue
-            
+            if isinstance(raw, str):
+                # Text document: create minimal structure for narrative path
+                sheet_struct = SheetStructure(
+                    sheet_name=preview.sheet_name,
+                    columns=[ColumnInference(
+                        original_name="content",
+                        canonical_name="content",
+                        data_type=DataType.STRING,
+                        semantic_role=SemanticRole.UNKNOWN,
+                        sample_values=[],
+                    )],
+                    grain_description="Document paragraphs/lines",
+                    row_count=len([l for l in raw.splitlines() if l.strip()]) or 1,
+                    primary_key_candidates=[],
+                )
+                sheets.append(sheet_struct)
+                continue
+            if not isinstance(raw, pd.DataFrame):
+                continue
+            df = raw
+
             # Build context for LLM
             column_preview = ", ".join([str(c) for c in df.columns[:10]])
             sample_data = df.head(10).to_string(max_rows=10, max_cols=10)

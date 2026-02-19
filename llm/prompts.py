@@ -20,7 +20,7 @@ SHEETS: {sheets}
 PREVIEW ROWS: {preview_rows}
 
 Analyze the content and determine:
-1. Primary type: narrative (text documents), structured (tabular data), or mixed
+1. Primary type: narrative (text documents like .docx, .md, .txt), structured (tabular data), or mixed
 2. Domain: financial, operational, sales, hr, inventory, or general
 3. Entity name: company, department, product line, etc.
 4. Time period: start and end dates if detectable

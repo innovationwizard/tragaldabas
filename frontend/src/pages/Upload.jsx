@@ -37,7 +37,7 @@ const Upload = () => {
     ))
 
     if (invalid) {
-      setError('Invalid file type. Please upload Excel, CSV, Word, or audio files.')
+      setError('Invalid file type. Please upload Excel, CSV, Word, Markdown, text, or audio files.')
       return
     }
 
@@ -114,7 +114,7 @@ const Upload = () => {
                 <input
                   type="file"
                   onChange={handleFileChange}
-                  accept=".xlsx,.xls,.csv,.docx,.mp3,.wav,.m4a,.flac,.ogg,.webm"
+                  accept=".xlsx,.xls,.csv,.docx,.md,.txt,.mp3,.wav,.m4a,.flac,.ogg,.webm"
                   multiple
                   className="hidden"
                   id="file-input"

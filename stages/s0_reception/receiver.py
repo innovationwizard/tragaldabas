@@ -6,7 +6,7 @@ from typing import Union
 from core.interfaces import Stage
 from core.models import ReceptionResult
 from core.exceptions import StageError, FileParseError
-from .parsers import ExcelParser, CSVParser, WordParser, AudioParser
+from .parsers import ExcelParser, CSVParser, WordParser, TextParser, MarkdownParser, AudioParser
 
 
 class Receiver(Stage[str, ReceptionResult]):
@@ -26,6 +26,8 @@ class Receiver(Stage[str, ReceptionResult]):
             ".xls": ExcelParser(),
             ".csv": CSVParser(),
             ".docx": WordParser(),
+            ".md": MarkdownParser(),
+            ".txt": TextParser(),
             ".mp3": AudioParser(),
             ".wav": AudioParser(),
             ".m4a": AudioParser(),

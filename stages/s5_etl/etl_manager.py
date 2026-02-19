@@ -15,7 +15,7 @@ from db import DatabaseManager, SchemaManager, DataLoader
 from config import settings
 
 
-class ETLManager(Stage[Union[ArchaeologyResult, ReconciliationResult], ETLResult]):
+class ETLManager(Stage[Union[ArchaeologyResult, ReconciliationResult, Dict[str, Any]], ETLResult]):
     """Stage 5: Design schema, transform, validate, and persist"""
     
     @property
@@ -31,17 +31,34 @@ class ETLManager(Stage[Union[ArchaeologyResult, ReconciliationResult], ETLResult
         self.schema_manager = SchemaManager(self.db) if self.db else None
         self.data_loader = DataLoader(self.db) if self.db else None
     
-    def validate_input(self, input_data: Union[ArchaeologyResult, ReconciliationResult]) -> bool:
-        return isinstance(input_data, (ArchaeologyResult, ReconciliationResult))
+    def validate_input(self, input_data) -> bool:
+        if isinstance(input_data, (ArchaeologyResult, ReconciliationResult)):
+            return True
+        if isinstance(input_data, dict) and input_data.get("narrative_mode"):
+            return "reception" in input_data
+        return False
     
-    async def execute(self, input_data: Union[ArchaeologyResult, ReconciliationResult]) -> ETLResult:
+    async def execute(self, input_data) -> ETLResult:
         """Execute ETL stage"""
-        # Get DataFrame
-        if isinstance(input_data, ReconciliationResult):
+        # Narrative mode: text documents (.docx, .md, .txt)
+        if isinstance(input_data, dict) and input_data.get("narrative_mode"):
+            reception = input_data.get("reception")
+            if not reception or not reception.raw_data:
+                raise StageError(self.stage_number, "Narrative mode requires reception with raw_data")
+            raw = reception.raw_data.get("Document", "")
+            if isinstance(raw, str):
+                # Split into paragraphs (non-empty lines) for analysis
+                paragraphs = [p.strip() for p in raw.splitlines() if p.strip()]
+                if not paragraphs:
+                    paragraphs = [raw[:5000] if raw else ""]
+                df = pd.DataFrame({"content": paragraphs})
+            else:
+                df = pd.DataFrame({"content": [str(raw)]})
+            table_name = "document_content"
+        elif isinstance(input_data, ReconciliationResult):
             df = input_data.unified_data
             table_name = "unified_data"
         else:
-            # Use first sheet
             df = list(input_data.cleaned_data.values())[0]
             table_name = list(input_data.cleaned_data.keys())[0]
         
