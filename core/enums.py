@@ -11,6 +11,7 @@ class FileType(str, Enum):
     WORD_DOCX = "docx"
     MARKDOWN = "md"
     PLAIN_TEXT = "txt"
+    PDF = "pdf"
     AUDIO = "audio"
 
 
@@ -28,6 +29,16 @@ class Domain(str, Enum):
     SALES = "sales"
     HR = "hr"
     INVENTORY = "inventory"
+    GENERAL = "general"
+
+
+class NarrativeContentType(str, Enum):
+    """Content-type classification for narrative/unstructured input (replaces Domain for narrative path)"""
+    MEETING_STRUCTURED = "meeting_structured"      # agenda-driven, decisions made
+    MEETING_BRAINSTORM = "meeting_brainstorm"     # idea generation, divergent
+    MEETING_STATUS = "meeting_status"             # updates, blockers, progress
+    NOTES_SEQUENTIAL = "notes_sequential"         # linear narrative (journal, log)
+    NOTES_FRAGMENTED = "notes_fragmented"        # random ideas, sketches, mixed topics
     GENERAL = "general"
 
 

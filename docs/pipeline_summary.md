@@ -9,7 +9,34 @@ The purpose of the pipeline is to input Excel files and output the code necessar
 
 - Files are uploaded to Supabase Storage and a `pipeline_jobs` row is created.
 - The worker (local or deployed) downloads the file, runs the pipeline, and stores results.
+- **Routing at ingestion**: File type determines path—**numeric** (Excel, CSV) vs **narrative** (audio, Word, MD, TXT, PDF).
+- Both paths converge at the Insight/Output layer (Stage 7).
 - For app-generation jobs, the standard pipeline runs first (1–7), then Genesis runs (8–12).
+
+## Narrative Pipeline (Audio, Documents, Notes)
+
+For meeting recordings, notebooks, and unstructured text:
+
+1. **Reception**  
+   - **Audio**: Whisper transcription; optional speaker diarization (pyannote) when `SPEAKER_DIARIZATION_ENABLED=True` and `HUGGINGFACE_TOKEN` set.  
+   - **Documents**: Word/MD/TXT via existing parsers; PDF via unstructured.io (or pypdf fallback).
+
+2. **Classification**  
+   Content-type classifier: `meeting_structured`, `meeting_brainstorm`, `meeting_status`, `notes_sequential`, `notes_fragmented`, `general`.
+
+3. **Narrative Extraction** (replaces Stages 2–5)  
+   Single LLM call producing `NarrativeExtraction`: topics, decisions, action_items, key_statements, open_questions, ideas, tensions, sentiment_arc.
+
+4. **Narrative Analysis** (replaces Stage 6 for narrative)  
+   Narrative metrics (decision density, unowned action items, open questions, etc.) and insight qualification with `NarrativeEvidence` (quote, pattern, absence, contradiction).
+
+5. **Alpha Strike** (adapted personas for narrative)  
+   - Pattern Analyst (contradictions, conflicting commitments)  
+   - Devil's Advocate (challenges ideas, groupthink)  
+   - Industry Oracle (unchanged)
+
+6. **Output**  
+   Same Stage 7; renders both numeric `Evidence` and `NarrativeEvidence` in text, markdown, and PowerPoint.
 
 ## Standard Pipeline (Stages 1–7)
 

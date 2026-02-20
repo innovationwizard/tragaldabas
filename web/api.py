@@ -1279,6 +1279,7 @@ async def run_pipeline(job_id: str, file_path: str, user_id: str, app_generation
             "archaeology": serialize_model(ctx.archaeology),
             "reconciliation": serialize_model(ctx.reconciliation),
             "etl": serialize_model(ctx.etl),
+            "narrative_extraction": serialize_model(ctx.narrative_extraction),
             "analysis": serialize_model(ctx.analysis),
             "output": output_dict,
             "cell_classification": serialize_model(ctx.cell_classification),

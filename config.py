@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # Audio transcription (Stage 0 for audio uploads)
     AUDIO_TRANSCRIPTION_MODEL: str = "whisper-1"
     AUDIO_TRANSCRIPTION_LANGUAGE: Optional[str] = None  # e.g., "es"
+    SPEAKER_DIARIZATION_ENABLED: bool = False  # Requires pyannote + HF token
+    HUGGINGFACE_TOKEN: Optional[str] = None  # For pyannote speaker diarization
     
     # Database
     DATABASE_URL: Optional[str] = None

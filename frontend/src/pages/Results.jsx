@@ -136,9 +136,11 @@ const Results = () => {
   }
 
   const result = job.result || {}
+  const hasNarrative = !!(result.narrative_extraction)
   const tabs = [
     { id: 'overview', name: 'Overview' },
     { id: 'classification', name: 'Classification' },
+    ...(hasNarrative ? [{ id: 'extraction', name: 'Extraction' }] : []),
     { id: 'structure', name: 'Structure' },
     { id: 'analysis', name: 'Analysis' },
     { id: 'output', name: 'Deliverables' },
@@ -224,6 +226,58 @@ const Results = () => {
               </div>
             )}
 
+            {activeTab === 'extraction' && result.narrative_extraction && (
+              <div>
+                <h2 className="text-2xl font-semibold mb-4">Narrative Extraction</h2>
+                <div className="space-y-6">
+                  {result.narrative_extraction.decisions?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Decisions</h3>
+                      <ul className="list-disc list-inside space-y-1 text-brand-text">
+                        {result.narrative_extraction.decisions.map((d, i) => (
+                          <li key={i}>{d.what}{d.who_decided ? ` (${d.who_decided})` : ''}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {result.narrative_extraction.action_items?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Action Items</h3>
+                      <ul className="space-y-2 text-brand-text">
+                        {result.narrative_extraction.action_items.map((a, i) => (
+                          <li key={i} className="card bg-brand-bg p-3">
+                            {a.task}
+                            {a.owner && <span className="text-brand-muted text-sm"> — {a.owner}</span>}
+                            {a.deadline && <span className="text-brand-muted text-sm"> — {a.deadline}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {result.narrative_extraction.open_questions?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Open Questions</h3>
+                      <ul className="list-disc list-inside space-y-1 text-brand-text">
+                        {result.narrative_extraction.open_questions.map((q, i) => (
+                          <li key={i}>{q.question}{q.raised_by ? ` (${q.raised_by})` : ''}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {result.narrative_extraction.ideas?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Ideas</h3>
+                      <ul className="list-disc list-inside space-y-1 text-brand-text">
+                        {result.narrative_extraction.ideas.map((idea, i) => (
+                          <li key={i}>{idea.concept}{idea.proposer ? ` (${idea.proposer})` : ''}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {activeTab === 'classification' && result.classification && (
               <div>
                 <h2 className="text-2xl font-semibold mb-4">Classification</h2>
@@ -236,6 +290,12 @@ const Results = () => {
                     <h3 className="font-semibold mb-2">Domain</h3>
                     <p className="text-brand-text">{result.classification.domain}</p>
                   </div>
+                  {result.classification.narrative_content_type && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Content Type (Narrative)</h3>
+                      <p className="text-brand-text">{result.classification.narrative_content_type}</p>
+                    </div>
+                  )}
                   <div>
                     <h3 className="font-semibold mb-2">Confidence</h3>
                     <p className="text-brand-text">{(result.classification.confidence * 100).toFixed(1)}%</p>
@@ -303,6 +363,18 @@ const Results = () => {
                     <span className="text-brand-text">{result.analysis.domain}</span>
                   </div>
                 )}
+                {result.analysis.narrative_metrics && result.analysis.narrative_metrics.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold mb-2">Narrative Metrics</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {result.analysis.narrative_metrics.map((metric, idx) => (
+                        <span key={idx} className="px-2 py-1 bg-brand-bg rounded text-sm">
+                          {chipText(metric)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {result.analysis.metrics_computed && result.analysis.metrics_computed.length > 0 && (
                   <div className="mb-4">
                     <h3 className="font-semibold mb-2">Metrics Computed</h3>
@@ -329,9 +401,7 @@ const Results = () => {
                 )}
                 <div className="space-y-4">
                   {result.analysis.insights && result.analysis.insights.length > 0 ? (
-                    (() => {
-                      console.log('Insights data:', JSON.stringify(result.analysis.insights, null, 2))
-                      return result.analysis.insights.map((insight, idx) => {
+                    result.analysis.insights.map((insight, idx) => {
                       // Handle both object and string formats
                       const headline = insight?.headline || insight?.title || `Insight ${idx + 1}`
                       const detail = insight?.detail || insight?.description || ''
@@ -355,11 +425,23 @@ const Results = () => {
                           {evidence && typeof evidence === 'object' && Object.keys(evidence).length > 0 && (
                             <div className="mt-2 p-2 bg-brand-surface rounded text-sm">
                               <p className="text-brand-muted text-xs mb-1">Evidence:</p>
-                              {evidence.metric && <p className="text-brand-text">Metric: {evidence.metric}</p>}
-                              {evidence.value !== undefined && evidence.value !== null && <p className="text-brand-text">Value: {evidence.value}</p>}
-                              {evidence.comparison && <p className="text-brand-text">Comparison: {evidence.comparison}</p>}
-                              {evidence.delta !== undefined && evidence.delta !== null && <p className="text-brand-text">Delta: {evidence.delta}</p>}
-                              {evidence.delta_percent !== undefined && evidence.delta_percent !== null && <p className="text-brand-text">Delta %: {evidence.delta_percent}%</p>}
+                              {evidence.source_type ? (
+                                <>
+                                  <p className="text-brand-text"><span className="text-brand-muted">Type:</span> {evidence.source_type}</p>
+                                  <p className="text-brand-text"><span className="text-brand-muted">Reference:</span> {evidence.reference}</p>
+                                  {evidence.speaker && <p className="text-brand-text"><span className="text-brand-muted">Speaker:</span> {evidence.speaker}</p>}
+                                  {evidence.timestamp && <p className="text-brand-text"><span className="text-brand-muted">When:</span> {evidence.timestamp}</p>}
+                                  {evidence.context && <p className="text-brand-text"><span className="text-brand-muted">Context:</span> {evidence.context}</p>}
+                                </>
+                              ) : (
+                                <>
+                                  {evidence.metric && <p className="text-brand-text">Metric: {evidence.metric}</p>}
+                                  {evidence.value !== undefined && evidence.value !== null && <p className="text-brand-text">Value: {evidence.value}</p>}
+                                  {evidence.comparison && <p className="text-brand-text">Comparison: {evidence.comparison}</p>}
+                                  {evidence.delta !== undefined && evidence.delta !== null && <p className="text-brand-text">Delta: {evidence.delta}</p>}
+                                  {evidence.delta_percent !== undefined && evidence.delta_percent !== null && <p className="text-brand-text">Delta %: {evidence.delta_percent}%</p>}
+                                </>
+                              )}
                             </div>
                           )}
                           {implication && (
@@ -368,7 +450,6 @@ const Results = () => {
                         </div>
                       )
                     })
-                    })()
                   ) : (
                     <div className="card bg-brand-bg">
                       <p className="text-brand-muted">No insights available for this analysis.</p>

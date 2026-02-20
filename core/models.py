@@ -1,12 +1,12 @@
 """Core data models for Tragaldabas pipeline"""
 
 from pydantic import BaseModel, Field
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Union, Literal
 from datetime import datetime
 from .enums import (
     FileType, ContentType, Domain, DataType, SemanticRole,
     Severity, VisualizationType, ValidationIssueType,
-    CellRole, InputType, SemanticType
+    CellRole, InputType, SemanticType, NarrativeContentType
 )
 
 
@@ -52,6 +52,7 @@ class ContentClassification(BaseModel):
     """Output of Stage 1"""
     primary_type: ContentType
     domain: Domain
+    narrative_content_type: Optional[NarrativeContentType] = None  # For narrative path
     entity_name: Optional[str] = None
     time_period_start: Optional[datetime] = None
     time_period_end: Optional[datetime] = None
@@ -193,7 +194,7 @@ class ETLResult(BaseModel):
 # ─────────────────────────────────────────────────────────────
 
 class Evidence(BaseModel):
-    """Supporting data for an insight"""
+    """Supporting data for an insight (numeric pipeline)"""
     metric: str
     value: float
     comparison: Optional[str] = None
@@ -201,12 +202,92 @@ class Evidence(BaseModel):
     delta_percent: Optional[float] = None
 
 
+class NarrativeEvidence(BaseModel):
+    """Supporting data for narrative insights (meetings, notes)"""
+    source_type: Literal["quote", "pattern", "absence", "contradiction"]
+    reference: str  # quote or description
+    speaker: Optional[str] = None
+    timestamp: Optional[str] = None  # when in recording / where in doc
+    context: str = ""  # surrounding context
+
+
+# ─────────────────────────────────────────────────────────────
+# Narrative Pipeline: Structured Extraction
+# ─────────────────────────────────────────────────────────────
+
+class Topic(BaseModel):
+    theme: str
+    summary: str
+    relevance_score: float = 0.0
+
+
+class Decision(BaseModel):
+    what: str
+    who_decided: Optional[str] = None
+    context: str = ""
+    timestamp: Optional[str] = None
+
+
+class ActionItem(BaseModel):
+    task: str
+    owner: Optional[str] = None
+    deadline: Optional[str] = None
+    priority: str = ""
+    status: str = ""
+
+
+class Statement(BaseModel):
+    quote: str
+    speaker: Optional[str] = None
+    significance: str = ""
+    sentiment: str = ""
+
+
+class Question(BaseModel):
+    question: str
+    raised_by: Optional[str] = None
+    context: str = ""
+
+
+class Idea(BaseModel):
+    concept: str
+    proposer: Optional[str] = None
+    feasibility: str = ""
+    novelty: str = ""
+
+
+class Tension(BaseModel):
+    opposing_views: str
+    parties: str = ""
+    resolution_status: str = ""
+
+
+class SentimentPoint(BaseModel):
+    timestamp_or_section: str = ""
+    sentiment: str = ""
+    trigger: str = ""
+
+
+class NarrativeExtraction(BaseModel):
+    """Structured extraction from unstructured content (meetings, notes)"""
+    content_type: NarrativeContentType
+    topics: list[Topic] = []
+    decisions: list[Decision] = []
+    action_items: list[ActionItem] = []
+    key_statements: list[Statement] = []
+    open_questions: list[Question] = []
+    ideas: list[Idea] = []
+    tensions: list[Tension] = []
+    sentiment_arc: list[SentimentPoint] = []
+    raw_transcript: str = ""  # Full text for reference
+
+
 class Insight(BaseModel):
     """Single analytical insight"""
     id: str
     headline: str = Field(max_length=100)
     detail: str = Field(max_length=300)
-    evidence: Evidence
+    evidence: Union[Evidence, NarrativeEvidence]
     implication: str
     severity: Severity
     visualization_hint: VisualizationType
@@ -227,6 +308,7 @@ class AnalysisResult(BaseModel):
     domain: Domain
     metrics_computed: list[str] = []
     patterns_detected: list[str] = []
+    narrative_metrics: list[str] = []  # For narrative path: decision density, action-item risk, etc.
     insights: list[Insight] = []
     genius_insight: Optional[GeniusInsight] = None  # Alpha Strike: "The Genius Move"
 

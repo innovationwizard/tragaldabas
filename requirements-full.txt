@@ -53,3 +53,8 @@ websockets>=12.0
 
 # Supabase (optional - for Supabase Auth)
 supabase>=2.0.0
+
+# Narrative pipeline (optional)
+pypdf>=3.0.0                # PDF fallback (lightweight)
+unstructured[pdf]>=0.10.0    # PDF + layout-aware extraction
+pyannote-audio>=3.0.0       # Speaker diarization (requires HUGGINGFACE_TOKEN)

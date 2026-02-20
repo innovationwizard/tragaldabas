@@ -36,9 +36,46 @@ Respond with JSON only:
     "reasoning": "<brief explanation>"
 }}"""
     
+    @property
+    def narrative_prompt_template(self) -> str:
+        return """Analyze this narrative content (meeting transcript, notes, document) and classify its type.
+
+FILE: {file_name}
+TYPE: {file_type}
+CONTENT PREVIEW:
+{preview}
+
+Classify the content type:
+- meeting_structured: agenda-driven meeting with clear decisions made
+- meeting_brainstorm: idea generation, divergent discussion
+- meeting_status: updates, blockers, progress reports
+- notes_sequential: linear narrative (journal, log, diary)
+- notes_fragmented: random ideas, sketches, mixed topics
+- general: does not fit above
+
+Respond with JSON only:
+{{
+    "primary_type": "narrative",
+    "narrative_content_type": "meeting_structured|meeting_brainstorm|meeting_status|notes_sequential|notes_fragmented|general",
+    "domain": "financial|operational|sales|hr|inventory|general",
+    "entity_name": "<string or null>",
+    "time_period_start": "<ISO date or null>",
+    "time_period_end": "<ISO date or null>",
+    "confidence": <float 0-1>,
+    "reasoning": "<brief explanation>"
+}}"""
+    
     def build_prompt(self, context: Dict[str, Any]) -> str:
         sheets_str = ", ".join(context.get("sheets", []))
         preview = context.get("preview", "")
+        narrative = context.get("narrative", False)
+        
+        if narrative:
+            return self.narrative_prompt_template.format(
+                file_name=context.get("file_name", "unknown"),
+                file_type=context.get("file_type", "unknown"),
+                preview=preview[:4000]  # More content for narrative classification
+            )
         
         return self.prompt_template.format(
             file_name=context.get("file_name", "unknown"),
@@ -256,6 +293,100 @@ Respond with JSON:
         return self._robust_json_load(clean, response)
 
 
+class NarrativeExtractionPrompt(LLMTask):
+    """Prompt for structured extraction from narrative content (meetings, notes)"""
+    
+    @property
+    def prompt_template(self) -> str:
+        return """Extract structured information from this narrative content.
+
+CONTENT TYPE: {content_type}
+RAW CONTENT:
+{content}
+
+Extract and return valid JSON matching this schema. Use empty arrays [] for missing sections.
+
+{{
+    "content_type": "{content_type}",
+    "topics": [{{"theme": "<string>", "summary": "<string>", "relevance_score": <0-1>}}],
+    "decisions": [{{"what": "<string>", "who_decided": "<string or null>", "context": "<string>", "timestamp": "<string or null>"}}],
+    "action_items": [{{"task": "<string>", "owner": "<string or null>", "deadline": "<string or null>", "priority": "<string>", "status": "<string>"}}],
+    "key_statements": [{{"quote": "<string>", "speaker": "<string or null>", "significance": "<string>", "sentiment": "<string>"}}],
+    "open_questions": [{{"question": "<string>", "raised_by": "<string or null>", "context": "<string>"}}],
+    "ideas": [{{"concept": "<string>", "proposer": "<string or null>", "feasibility": "<string>", "novelty": "<string>"}}],
+    "tensions": [{{"opposing_views": "<string>", "parties": "<string>", "resolution_status": "<string>"}}],
+    "sentiment_arc": [{{"timestamp_or_section": "<string>", "sentiment": "<string>", "trigger": "<string>"}}]
+}}
+
+Weight extraction by content type:
+- meeting_structured/meeting_status: emphasize decisions, action_items, open_questions
+- meeting_brainstorm: emphasize ideas, tensions, key_statements
+- notes_sequential: emphasize topics, sentiment_arc
+- notes_fragmented: emphasize ideas, topics
+- general: extract all applicable
+
+Respond with JSON only. No markdown."""
+    
+    def build_prompt(self, context: Dict[str, Any]) -> str:
+        return self.prompt_template.format(
+            content_type=context.get("content_type", "general"),
+            content=context.get("content", "")[:12000]  # Token limit
+        )
+    
+    def parse_response(self, response: str) -> Dict[str, Any]:
+        clean = self._clean_json_response(response)
+        return self._robust_json_load(clean, response)
+
+
+class NarrativeInsightsPrompt(LLMTask):
+    """Prompt for narrative insight qualification (adapted filters for meetings/notes)"""
+    
+    @property
+    def prompt_template(self) -> str:
+        return """Review these narrative insights and filter for relevancy.
+
+CONTENT TYPE: {content_type}
+NARRATIVE METRICS: {metrics}
+INSIGHTS: {insights}
+
+Include if: unowned action item, contradictory decisions, high-novelty idea with no follow-up, recurring unresolved question, significant sentiment shift, deadline risk
+Exclude if: routine status update, restated known fact, social chatter, trivial agreement
+
+Respond with JSON:
+{{
+    "qualified_insights": [
+        {{
+            "headline": "<string>",
+            "detail": "<string>",
+            "evidence": {{
+                "source_type": "quote|pattern|absence|contradiction",
+                "reference": "<quote or description>",
+                "speaker": "<string or null>",
+                "timestamp": "<string or null>",
+                "context": "<string>"
+            }},
+            "implication": "<string>",
+            "severity": "info|warning|critical",
+            "visualization_hint": "metric_callout|table|none",
+            "included": <boolean>
+        }},
+        ...
+    ]
+}}"""
+    
+    def build_prompt(self, context: Dict[str, Any]) -> str:
+        insights_json = json.dumps(context.get("insights", []), indent=2)
+        return self.prompt_template.format(
+            content_type=context.get("content_type", "general"),
+            metrics=", ".join(context.get("metrics", [])),
+            insights=insights_json
+        )
+    
+    def parse_response(self, response: str) -> Dict[str, Any]:
+        clean = self._clean_json_response(response)
+        return self._robust_json_load(clean, response)
+
+
 class InsightsPrompt(LLMTask):
     """Prompt for insight qualification and filtering (Stage 6)"""
     
@@ -426,7 +557,11 @@ Respond with JSON:
 
 
 # Add helper method to all prompt classes
-for cls in [ClassificationPrompt, StructurePrompt, ArchaeologyPrompt, AnalysisPrompt, InsightsPrompt]:
+for cls in [
+    ClassificationPrompt, StructurePrompt, ArchaeologyPrompt,
+    AnalysisPrompt, InsightsPrompt,
+    NarrativeExtractionPrompt, NarrativeInsightsPrompt,
+]:
     cls._clean_json_response = InsightsPrompt._clean_json_response
     cls._robust_json_load = InsightsPrompt._robust_json_load
 

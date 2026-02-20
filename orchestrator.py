@@ -6,12 +6,14 @@ from typing import Optional
 from core.models import *
 from core.exceptions import PipelineError, StageError
 from core.enums import ContentType, FileType
+from core.pipeline_router import is_narrative_file_type
 from stages import (
     Receiver, Classifier, StructureInferrer, Archaeologist,
     Reconciler, ETLManager, Analyzer, OutputManager,
     CellClassifier, DependencyGraphBuilder, LogicExtractor,
     CodeGenerator, Scaffolder
 )
+from stages.narrative import NarrativeExtractor, NarrativeAnalyzer
 from ui.progress import ProgressTracker
 from ui.prompts import UserPrompt
 from config import settings
@@ -27,6 +29,7 @@ class PipelineContext:
     archaeology: Optional[ArchaeologyResult] = None
     reconciliation: Optional[ReconciliationResult] = None
     etl: Optional[ETLResult] = None
+    narrative_extraction: Optional["NarrativeExtraction"] = None
     analysis: Optional[AnalysisResult] = None
     output: Optional[OutputResult] = None
     cell_classification: Optional[CellClassificationResult] = None
@@ -86,17 +89,18 @@ class Orchestrator:
             ctx.classification = await self._execute_stage(1, ctx.reception)
             ctx.classification = await self._confirm_classification(ctx.classification)
             
-            # Branch based on content type
-            if ctx.classification.primary_type == ContentType.NARRATIVE:
+            # Route by ingestion type: narrative (audio, docs, notes) vs numeric (tabular)
+            if is_narrative_file_type(ctx.reception.metadata.file_type):
                 ctx = await self._narrative_path(ctx)
             else:
                 ctx = await self._structured_path(ctx)
             
-            # Stage 6: Analysis
-            ctx.analysis = await self._execute_stage(6, {
-                "etl": ctx.etl,
-                "domain": ctx.classification.domain
-            })
+            # Stage 6: Analysis (numeric path uses Analyzer; narrative path already ran NarrativeAnalyzer)
+            if ctx.etl is not None:
+                ctx.analysis = await self._execute_stage(6, {
+                    "etl": ctx.etl,
+                    "domain": ctx.classification.domain
+                })
 
             # Alpha Strike: Strategic Alpha / Genius Move (post-analysis enrichment)
             if settings.ALPHA_STRIKE_ENABLED and ctx.analysis:
@@ -105,6 +109,7 @@ class Orchestrator:
                 ctx.analysis = await engine.run(
                     ctx.analysis,
                     etl=ctx.etl,
+                    narrative_extraction=ctx.narrative_extraction,
                     domain=ctx.classification.domain,
                 )
             
@@ -191,19 +196,33 @@ class Orchestrator:
         return ctx
     
     async def _narrative_path(self, ctx: PipelineContext) -> PipelineContext:
-        """Process narrative documents (Word)"""
-        
-        # Stage 2: Document structure
-        ctx.structure = await self._execute_stage(2, ctx.reception)
-        
-        # Skip stages 3-4 (not applicable)
-        # Stage 5: Extract facts, persist as structured
-        ctx.etl = await self._execute_stage(5, {
+        """Process narrative content (audio, Word, MD, TXT): extraction → analysis."""
+        # Narrative extraction (replaces Stages 2-5)
+        extractor = NarrativeExtractor()
+        if extractor.validate_input({
             "reception": ctx.reception,
-            "structure": ctx.structure,
-            "narrative_mode": True
-        })
-        
+            "classification": ctx.classification,
+        }):
+            ctx.narrative_extraction = await self._execute_narrative_stage(
+                extractor,
+                {"reception": ctx.reception, "classification": ctx.classification},
+            )
+        else:
+            raise PipelineError("Invalid input for narrative extraction", stage=5)
+
+        # Narrative analysis (replaces Stage 6 for narrative)
+        analyzer = NarrativeAnalyzer()
+        if analyzer.validate_input({
+            "narrative_extraction": ctx.narrative_extraction,
+            "classification": ctx.classification,
+        }):
+            ctx.analysis = await self._execute_narrative_stage(
+                analyzer,
+                {
+                    "narrative_extraction": ctx.narrative_extraction,
+                    "classification": ctx.classification,
+                },
+            )
         return ctx
 
     async def _app_generation_path(self, ctx: PipelineContext) -> PipelineContext:
@@ -251,6 +270,20 @@ class Orchestrator:
         if hasattr(complete_result, '__await__'):
             await complete_result
         
+        return result
+
+    async def _execute_narrative_stage(self, stage, input_data):
+        """Execute a narrative pipeline stage (extractor or analyzer) with progress tracking."""
+        stage_num = stage.stage_number
+        start_result = self.progress.start_stage(stage_num, stage.name)
+        if hasattr(start_result, '__await__'):
+            await start_result
+        if not stage.validate_input(input_data):
+            raise StageError(stage_num, "Invalid input")
+        result = await stage.execute(input_data)
+        complete_result = self.progress.complete_stage(stage_num)
+        if hasattr(complete_result, '__await__'):
+            await complete_result
         return result
     
     async def _confirm_classification(

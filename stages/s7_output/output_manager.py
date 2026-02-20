@@ -5,7 +5,7 @@ from typing import Dict, Any
 from datetime import datetime
 
 from core.interfaces import Stage
-from core.models import AnalysisResult, OutputResult
+from core.models import AnalysisResult, OutputResult, NarrativeEvidence
 from core.exceptions import StageError
 from config import settings
 
@@ -92,9 +92,15 @@ class OutputManager(Stage[AnalysisResult, OutputResult]):
         for insight in analysis.insights:
             lines.append(f"• {insight.headline}")
             lines.append(f"  {insight.detail}")
-            lines.append(f"  Evidence: {insight.evidence.metric} = {insight.evidence.value}")
-            if insight.evidence.delta:
-                lines.append(f"  Change: {insight.evidence.delta_percent:.1f}%")
+            ev = insight.evidence
+            if isinstance(ev, NarrativeEvidence):
+                lines.append(f"  Evidence ({ev.source_type}): {ev.reference}")
+                if ev.speaker:
+                    lines.append(f"  Speaker: {ev.speaker}")
+            else:
+                lines.append(f"  Evidence: {ev.metric} = {ev.value}")
+                if ev.delta is not None:
+                    lines.append(f"  Change: {ev.delta_percent:.1f}%")
             lines.append(f"  Implication: {insight.implication}")
             lines.append("")
         
@@ -143,9 +149,15 @@ class OutputManager(Stage[AnalysisResult, OutputResult]):
             lines.append("")
             lines.append(f"{insight.detail}")
             lines.append("")
-            lines.append(f"- **Metric:** {insight.evidence.metric} = {insight.evidence.value}")
-            if insight.evidence.delta:
-                lines.append(f"- **Change:** {insight.evidence.delta_percent:.1f}%")
+            ev = insight.evidence
+            if isinstance(ev, NarrativeEvidence):
+                lines.append(f"- **Evidence ({ev.source_type}):** {ev.reference}")
+                if ev.speaker:
+                    lines.append(f"- **Speaker:** {ev.speaker}")
+            else:
+                lines.append(f"- **Metric:** {ev.metric} = {ev.value}")
+                if ev.delta is not None:
+                    lines.append(f"- **Change:** {ev.delta_percent:.1f}%")
             lines.append(f"- **Implication:** {insight.implication}")
             lines.append("")
         
@@ -217,14 +229,23 @@ class OutputManager(Stage[AnalysisResult, OutputResult]):
                 tf = content.text_frame
                 tf.text = insight.detail
                 
-                p = tf.add_paragraph()
-                p.text = f"Metric: {insight.evidence.metric} = {insight.evidence.value}"
-                p.level = 1
-                
-                if insight.evidence.delta:
+                ev = insight.evidence
+                if isinstance(ev, NarrativeEvidence):
                     p = tf.add_paragraph()
-                    p.text = f"Change: {insight.evidence.delta_percent:.1f}%"
+                    p.text = f"Evidence ({ev.source_type}): {ev.reference}"
                     p.level = 1
+                    if ev.speaker:
+                        p = tf.add_paragraph()
+                        p.text = f"Speaker: {ev.speaker}"
+                        p.level = 1
+                else:
+                    p = tf.add_paragraph()
+                    p.text = f"Metric: {ev.metric} = {ev.value}"
+                    p.level = 1
+                    if ev.delta is not None:
+                        p = tf.add_paragraph()
+                        p.text = f"Change: {ev.delta_percent:.1f}%"
+                        p.level = 1
                 
                 p = tf.add_paragraph()
                 p.text = f"Implication: {insight.implication}"

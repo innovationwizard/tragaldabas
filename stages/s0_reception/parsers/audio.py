@@ -52,6 +52,18 @@ class AudioParser(FileParser):
             transcript = (response.text or "").strip()
             language = getattr(response, "language", None)
 
+            # Optional: speaker diarization for meeting attribution
+            if settings.SPEAKER_DIARIZATION_ENABLED and settings.HUGGINGFACE_TOKEN:
+                try:
+                    from .diarization import merge_transcript_with_diarization
+                    transcript = merge_transcript_with_diarization(
+                        transcript,
+                        str(path),
+                        hf_token=settings.HUGGINGFACE_TOKEN,
+                    )
+                except Exception:
+                    pass  # Fall back to raw transcript
+
             lines = [line for line in transcript.splitlines() if line.strip()]
             preview_rows = [[line] for line in lines[:50]]
 

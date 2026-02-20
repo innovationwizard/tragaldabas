@@ -6,6 +6,7 @@ from .csv import CSVParser
 from .word import WordParser
 from .text import TextParser, MarkdownParser
 from .audio import AudioParser
+from .pdf import PDFParser
 
 __all__ = [
     "FileParser",
@@ -15,5 +16,6 @@ __all__ = [
     "TextParser",
     "MarkdownParser",
     "AudioParser",
+    "PDFParser",
 ]
 
